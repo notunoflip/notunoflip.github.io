@@ -1,47 +1,80 @@
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { getServiceClient } from "../_shared/supabaseClient.ts";
+import getServiceClient from "../_shared/supabaseClient.ts";
 
-serve(async (req) => {
+Deno.serve(async (req: Request) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }
+
   try {
     const { room_id, player_id, cards_per_player } = await req.json();
     const supabase = getServiceClient();
 
-    // verify host
+    // Verify host
     const { data: hostRow, error: hostErr } = await supabase
-      .from("rooms").select("host_id").eq("id", room_id).single();
+      .from("rooms")
+      .select("host_id")
+      .eq("id", room_id)
+      .single();
+
     if (hostErr || !hostRow) {
       return new Response(JSON.stringify({ error: "room not found" }), {
         status: 404,
+        headers: { "Access-Control-Allow-Origin": "*" },
       });
     }
+
     if (hostRow.host_id !== player_id) {
       return new Response(JSON.stringify({ error: "only host can start" }), {
         status: 403,
+        headers: { "Access-Control-Allow-Origin": "*" },
       });
     }
 
-    // Example: require at least 2 players to start
+    // Require at least 2 players
     const { count, error: countError } = await supabase
       .from("players")
       .select("*", { count: "exact", head: true })
-      .eq("room_id", room.id);
-    if (countError) return new Response(countError.message, { status: 500 });
+      .eq("room_id", room_id);
+
+    if (countError)
+      return new Response(JSON.stringify({ error: countError.message }), {
+        status: 500,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+
     if ((count ?? 0) < 2) {
-      return new Response("Not enough players", { status: 400 });
+      return new Response(JSON.stringify({ error: "Not enough players" }), {
+        status: 400,
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
     }
 
+    // Start game RPC
     const { error } = await supabase.rpc("fn_start_game", {
       p_room: room_id,
       p_cards_per_player: cards_per_player ?? 7,
     });
+
     if (error) throw error;
 
     return new Response(JSON.stringify({ ok: true }), {
-      headers: { "content-type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      },
     });
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e?.message ?? String(e) }), {
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
+      headers: { "Access-Control-Allow-Origin": "*" },
     });
   }
 });
+ 
