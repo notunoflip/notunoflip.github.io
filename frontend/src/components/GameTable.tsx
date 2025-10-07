@@ -4,7 +4,6 @@ import { Card } from "./Card";
 import type { CardColor, CardValue } from "./Card";
 import { PlayerHand } from "./PlayerHand";
 import { Clock } from "lucide-react";
-import Header from "./Header";
 
 interface GameTableProps {
   currentPlayer: { color: CardColor; value: CardValue }[];
@@ -25,7 +24,7 @@ export const GameTable = ({
 }: GameTableProps) => {
   const [isDrawPileHovered, setIsDrawPileHovered] = useState(false);
   const [turnTimer, setTurnTimer] = useState(30);
-  const [isDark, setIsDark] = useState(false); // default: light mode
+  const [isDark] = useState(false); // default: light mode
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -35,10 +34,6 @@ export const GameTable = ({
     return () => clearInterval(interval);
   }, []);
 
-  const toggleTheme = () => {
-    setIsDark((prev) => !prev);
-    document.documentElement.classList.toggle("dark", !isDark);
-  };
 
   const handleCardPlay = (playerIndex: number, cardIndex: number) => {
     console.log(`Player ${playerIndex} played card ${cardIndex}`);
@@ -46,10 +41,6 @@ export const GameTable = ({
 
   return (
     <div className={`relative w-full h-screen overflow-hidden transition-colors ${isDark ? "dark" : "bg-green-100"}`}>
-      {/* Header overlay */}
-      <div className="absolute top-0 left-0 w-full z-50">
-        <Header isDark={isDark} toggleTheme={toggleTheme} />
-      </div>
 
       {/* Table background */}
       <div className="absolute inset-0 bg-gradient-to-br from-green-700 via-green-800 to-green-900 dark:from-gray-700 dark:via-gray-800 dark:to-gray-900">

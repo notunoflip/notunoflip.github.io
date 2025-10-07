@@ -72,9 +72,8 @@ export const Card = ({
   className = "",
   style,
   rotation = 0,
-  index = 0,
 }: CardProps) => {
-  const [isHovered, setIsHovered] = useState(false);
+  const [, setIsHovered] = useState(false);
 
   return (
     <motion.div

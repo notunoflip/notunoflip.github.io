@@ -48,7 +48,9 @@ CREATE TABLE public.room_cards (
   card_id uuid REFERENCES public.cards(id) ON DELETE CASCADE,
   owner_id uuid,
   location text CHECK (location IN ('deck','discard','hand')) NOT NULL,
-  order_index int
+  order_index int,
+  turn_start timestamptz DEFAULT now(),
+  turn_duration int DEFAULT 30; -- seconds per turn
 );
 CREATE INDEX idx_room_cards_room_order ON public.room_cards(room_id,location,order_index DESC);
 
@@ -87,11 +89,9 @@ CREATE POLICY room_update_host ON public.rooms FOR UPDATE USING (
 
 -- Players policies
 CREATE POLICY players_insert_anyone ON public.players FOR INSERT WITH CHECK (true);
-CREATE POLICY players_select_room ON public.players FOR SELECT USING (
-  room_id IN (SELECT room_id FROM public.players WHERE id = auth.uid())
-  OR auth.uid() IS NULL
-);
+CREATE POLICY players_select_self ON public.players FOR SELECT USING (id = auth.uid());
 CREATE POLICY players_update_self ON public.players FOR UPDATE USING (id = auth.uid());
+
 
 -- Cards policies
 CREATE POLICY cards_read_all ON public.cards FOR SELECT USING (true);

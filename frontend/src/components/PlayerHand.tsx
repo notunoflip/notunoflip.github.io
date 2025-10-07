@@ -49,7 +49,7 @@ export const PlayerHand = ({
       case "left":
       case "right":
         return {
-          width: "140px",
+          width: "80px",
           height: `${cards.length * 40}px`,
           flexDirection: "column" as const,
         };
