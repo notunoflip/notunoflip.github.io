@@ -1,5 +1,5 @@
-// components/Modal.tsx
 import type { ReactNode } from "react";
+import { X } from "lucide-react";
 
 interface ModalProps {
   open: boolean;
@@ -12,14 +12,18 @@ export default function Modal({ open, onClose, children }: ModalProps) {
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50">
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg w-full max-w-md">
-        {children}
+      <div className="relative bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg w-full max-w-md">
+        {/* Close button */}
         <button
           onClick={onClose}
-          className="mt-4 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-300"
+          className="absolute top-3 right-3 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
+          aria-label="Close"
         >
-          Close
+          <X size={18} />
         </button>
+
+        {/* Modal content */}
+        {children}
       </div>
     </div>
   );

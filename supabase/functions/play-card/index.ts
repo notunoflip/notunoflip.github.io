@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { getServiceClient } from "../_shared/supabaseClient.ts";
+import getServiceClient from "../_shared/supabaseClient.ts";
 
 serve(async (req) => {
   try {
@@ -19,7 +19,12 @@ serve(async (req) => {
       { headers: { "content-type": "application/json" } },
     );
   } catch (e) {
-    return new Response(JSON.stringify({ error: e?.message ?? String(e) }), {
+    const message = e instanceof Error
+      ? e.message
+      : typeof e === "string"
+      ? e
+      : JSON.stringify(e);
+    return new Response(JSON.stringify({ error: message }), {
       status: 400,
     });
   }

@@ -3,7 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import Layout from "./Layout";
-import App from "./App";
+import App from "./Lobby";
 import RoomPage from "./RoomPage";
 import "./index.css";
 

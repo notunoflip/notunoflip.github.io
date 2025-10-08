@@ -1,15 +1,10 @@
+import { corsHeaders } from "../_shared/cors.ts";
 import getServiceClient from "../_shared/supabaseClient.ts";
 
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
@@ -43,11 +38,12 @@ Deno.serve(async (req: Request) => {
       .select("*", { count: "exact", head: true })
       .eq("room_id", room_id);
 
-    if (countError)
+    if (countError) {
       return new Response(JSON.stringify({ error: countError.message }), {
         status: 500,
         headers: { "Access-Control-Allow-Origin": "*" },
       });
+    }
 
     if ((count ?? 0) < 2) {
       return new Response(JSON.stringify({ error: "Not enough players" }), {
@@ -77,4 +73,3 @@ Deno.serve(async (req: Request) => {
     });
   }
 });
- 

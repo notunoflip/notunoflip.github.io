@@ -44,13 +44,14 @@ const Header: React.FC<HeaderProps> = ({ session, onLogout, onSettings }) => {
       {/* Right side */}
       <div className="flex items-center space-x-4 relative">
         {/* Theme toggle */}
-        <button
+        {/* <button
           onClick={toggleTheme}
           aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
           className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
         >
           {isDark ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
+        </button> */}
+        
 
         {/* User info + dropdown */}
         {session ? (

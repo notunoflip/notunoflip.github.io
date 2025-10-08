@@ -58,10 +58,11 @@ CREATE INDEX idx_room_cards_room_order ON public.room_cards(room_id,location,ord
 CREATE TABLE public.players (
   id uuid PRIMARY KEY,
   room_id uuid REFERENCES public.rooms(id) ON DELETE SET NULL,
-  nickname text NOT NULL,
+  nickname text NOT NULL CHECK (nickname ~ '^[a-z0-9]{3,10}$'),
   is_host boolean DEFAULT false,
   is_anonymous boolean DEFAULT false,
   order_index integer DEFAULT 0
+  updated_at timestamptz DEFAULT now();
 );
 
 -- RLS ===========================================================================
