@@ -1,5 +1,5 @@
 // frontend/src/Layout.tsx
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import Header from "./components/Header";
 import { supabase } from "./lib/supabaseClient";
@@ -8,6 +8,7 @@ import { Toaster as Sonner, toast } from "sonner";
 
 export default function Layout() {
   const [session, setSession] = useState<Session | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Get initial session
@@ -20,6 +21,7 @@ export default function Layout() {
         toast.success(`Logged in as ${session.user.email}`);
       } else {
         toast.info("You have been logged out");
+        navigate("/");
       }
     });
 

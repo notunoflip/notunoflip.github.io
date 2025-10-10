@@ -1,12 +1,15 @@
-// _shared/supabaseClient.ts
+// supabase/functions/_shared/supabaseClient.ts
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// Export a function that returns a Supabase client
-export default function getServiceClient() {
+export default function getServiceClient(authHeader?: string) {
   const url = Deno.env.get("SUPABASE_URL")!;
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  
-  return createClient(url, key, {
-    auth: { persistSession: false },
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  // If auth header is passed, use it for user context
+  return createClient(url, serviceKey, {
+    global: {
+      headers: authHeader ? { Authorization: authHeader } : {},
+    },
+    auth: { persistSession: false }, // for serverside fn
   });
 }

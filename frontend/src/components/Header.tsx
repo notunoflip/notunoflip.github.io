@@ -1,7 +1,11 @@
-import { Sun, Moon, User, LogOut, Settings } from "lucide-react";
+import { User, LogOut, Settings, DoorOpen } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { useState, useRef, useEffect } from "react";
 import { useNickname } from "../hooks/useNickname"; // adjust path if needed
+import { useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+
+const LOCAL_EDGE_URL = "http://localhost:54321/functions/v1";
 
 interface HeaderProps {
   session: Session | null;
@@ -10,15 +14,12 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ session, onLogout, onSettings }) => {
-  const [isDark, setIsDark] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const { nickname, loading } = useNickname();
   const menuRef = useRef<HTMLDivElement>(null);
-
-  const toggleTheme = () => {
-    setIsDark(prev => !prev);
-    document.documentElement.classList.toggle("dark", !isDark);
-  };
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isInRoom = location.pathname.startsWith("/room/");
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -33,6 +34,38 @@ const Header: React.FC<HeaderProps> = ({ session, onLogout, onSettings }) => {
     };
   }, []);
 
+  const handleLeaveRoom = async () => {
+    if (!session) return;
+    const roomId = localStorage.getItem("roomId");
+    if (!roomId) {
+      toast.error("No active room found.");
+      return;
+    }
+
+    try {
+      toast.info("Leaving room...");
+
+      const res = await fetch(`${LOCAL_EDGE_URL}/leave-room`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+
+      if (!res.ok) throw new Error(await res.text());
+
+      // cleanup local state
+      localStorage.removeItem("roomId");
+      toast.success("You left the room.");
+      navigate("/", { replace: true });
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to leave room.");
+    }
+  };
+
   return (
     <header className="absolute top-0 left-0 w-full z-50 bg-gray-200 dark:bg-gray-800 shadow h-16 flex items-center justify-between px-4">
       {/* Logo + Title */}
@@ -43,15 +76,6 @@ const Header: React.FC<HeaderProps> = ({ session, onLogout, onSettings }) => {
 
       {/* Right side */}
       <div className="flex items-center space-x-4 relative">
-        {/* Theme toggle */}
-        {/* <button
-          onClick={toggleTheme}
-          aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-        >
-          {isDark ? <Sun size={20} /> : <Moon size={20} />}
-        </button> */}
-        
 
         {/* User info + dropdown */}
         {session ? (
@@ -80,16 +104,29 @@ const Header: React.FC<HeaderProps> = ({ session, onLogout, onSettings }) => {
                   <Settings size={16} className="mr-2" />
                   Settings
                 </button>
-                <button
-                  onClick={() => {
-                    onLogout();
-                    setUserMenuOpen(false);
-                  }}
-                  className="flex items-center w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
-                >
-                  <LogOut size={16} className="mr-2" />
-                  Logout
-                </button>
+                {isInRoom ? (
+                  <button
+                    onClick={() => {
+                      handleLeaveRoom();
+                      setUserMenuOpen(false);
+                    }}
+                    className="flex items-center w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                  >
+                    <DoorOpen size={16} className="mr-2" />
+                    Leave Room
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      onLogout();
+                      setUserMenuOpen(false);
+                    }}
+                    className="flex items-center w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600"
+                  >
+                    <LogOut size={16} className="mr-2" />
+                    Logout
+                  </button>
+                )}
               </div>
             )}
           </div>

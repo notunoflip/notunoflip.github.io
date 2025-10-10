@@ -9,40 +9,35 @@ Deno.serve(async (req) => {
   try {
     const supabase = getServiceClient();
 
-    // 🔑 Extract JWT token from headers
+    // 🔑 Extract token
     const token = req.headers.get("Authorization")?.replace("Bearer ", "");
     if (!token) {
       return new Response("Unauthorized", { status: 401, headers: corsHeaders });
     }
 
-    // ✅ Get user info
+    // ✅ Get auth user
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser(token);
-
     if (userError || !user) {
       return new Response("Invalid token", { status: 401, headers: corsHeaders });
     }
 
     const { playerName } = await req.json();
-    if (!playerName) {
-      return new Response("Missing playerName", { status: 400, headers: corsHeaders });
+    if (!playerName || !/^[a-z0-9]{3,10}$/.test(playerName)) {
+      return new Response("Invalid or missing playerName", { status: 400, headers: corsHeaders });
     }
 
-    // 🎲 Generate room code
-    const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-    // 🟢 Ensure player exists or update name if re-creating
+    // 🧑‍🎮 Ensure player record exists
     const { data: player, error: playerError } = await supabase
       .from("players")
       .upsert(
         {
-          id: user.id, // stable auth.uid
+          id: user.id,
           nickname: playerName,
-          is_host: true,
           is_anonymous: false,
-          order_index: 0,
+          updated_at: new Date().toISOString(),
         },
         { onConflict: "id" }
       )
@@ -50,10 +45,17 @@ Deno.serve(async (req) => {
       .single();
 
     if (playerError) {
-      return new Response(playerError.message, { status: 500, headers: corsHeaders });
+      console.error("playerError", playerError);
+      return new Response(JSON.stringify({ error: playerError.message }), {
+        status: 500,
+        headers: corsHeaders,
+      });
     }
 
-    // 🟢 Try inserting the room
+    // 🎲 Generate unique room code
+    const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    // 🏠 Create new room (one per host enforced by DB)
     let room;
     const { data: newRoom, error: roomError } = await supabase
       .from("rooms")
@@ -62,8 +64,8 @@ Deno.serve(async (req) => {
       .single();
 
     if (roomError) {
-      // Handle unique constraint violation → return existing room
       if (roomError.code === "23505") {
+        // host already has a room
         const { data: existingRoom } = await supabase
           .from("rooms")
           .select()
@@ -71,20 +73,48 @@ Deno.serve(async (req) => {
           .single();
         room = existingRoom;
       } else {
-        return new Response(roomError.message, { status: 500, headers: corsHeaders });
+        console.error("roomError", roomError);
+        return new Response(JSON.stringify({ error: roomError.message }), {
+          status: 500,
+          headers: corsHeaders,
+        });
       }
     } else {
       room = newRoom;
     }
 
-    // 🟢 Link player to room
-    await supabase.from("players").update({ room_id: room.id }).eq("id", user.id);
+    // 🧩 Link player → room in room_players (as host)
+    const { data: roomPlayer, error: linkError } = await supabase
+      .from("room_players")
+      .upsert(
+        {
+          room_id: room.id,
+          player_id: user.id,
+          is_host: true,
+          is_spectator: false,
+        },
+        { onConflict: "room_id,player_id" }
+      )
+      .select()
+      .single();
 
-    return new Response(JSON.stringify({ room, player }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    if (linkError) {
+      console.error("linkError", linkError);
+      return new Response(JSON.stringify({ error: linkError.message }), {
+        status: 500,
+        headers: corsHeaders,
+      });
+    }
+
+    return new Response(
+      JSON.stringify({ room, player, roomPlayer }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   } catch (err) {
+    console.error("Unexpected error:", err);
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

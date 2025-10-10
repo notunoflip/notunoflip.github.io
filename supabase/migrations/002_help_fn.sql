@@ -1,105 +1,88 @@
 -- ===============================================================
--- Get the top card of the discard pile
+-- Get top card of discard pile (same logic, no auth needed)
 -- ===============================================================
 CREATE OR REPLACE FUNCTION public.fn_top_discard(p_room uuid)
 RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
+LANGUAGE sql
+SECURITY INVOKER
 SET search_path = public
 AS $$
-DECLARE
-  top_card uuid;
-BEGIN
   SELECT rc.card_id
-  INTO top_card
   FROM public.room_cards rc
   WHERE rc.room_id = p_room
     AND rc.location = 'discard'
   ORDER BY rc.order_index DESC
   LIMIT 1;
-
-  RETURN top_card;
-END;
 $$;
 
-
 -- ===============================================================
--- Count cards left in deck
+-- Count cards left in deck (read-only, auth not required)
 -- ===============================================================
 CREATE OR REPLACE FUNCTION public.fn_deck_count(p_room uuid)
 RETURNS int
 LANGUAGE sql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public
 AS $$
   SELECT count(*) FROM public.room_cards
-  WHERE room_id = $1 AND location = 'deck';
+  WHERE room_id = p_room AND location = 'deck';
 $$;
 
-
 -- ===============================================================
--- Check if card is playable
+-- Check if card is playable (pure logic, no direct access)
 -- ===============================================================
 CREATE OR REPLACE FUNCTION public.fn_is_playable(p_room uuid, p_card uuid)
 RETURNS boolean
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public
 AS $$
 DECLARE
   top uuid;
-  playable boolean := false;
+  top_card public.cards%ROWTYPE;
+  my_card public.cards%ROWTYPE;
 BEGIN
   top := public.fn_top_discard(p_room);
-
   IF top IS NULL THEN
     RETURN true; -- First card can always be played
   END IF;
 
-  -- Example simplified logic: allow play if same color or value (extend later)
-  SELECT true INTO playable
-  FROM public.cards c1
-  JOIN public.cards c2 ON c2.id = top
-  WHERE c1.id = p_card
-    AND (
-      c1.light_color = c2.light_color OR
-      c1.light_value = c2.light_value OR
-      c1.is_wild = true
-    )
-  LIMIT 1;
+  SELECT * INTO top_card FROM public.cards WHERE id = top;
+  SELECT * INTO my_card FROM public.cards WHERE id = p_card;
 
-  RETURN COALESCE(playable, false);
+  IF my_card.is_wild THEN
+    RETURN true;
+  END IF;
+
+  IF my_card.light_color = top_card.light_color
+     OR my_card.light_value = top_card.light_value THEN
+    RETURN true;
+  END IF;
+
+  RETURN false;
 END;
 $$;
 
-
 -- ===============================================================
--- Get next player
+-- Get next player (simple lookup)
 -- ===============================================================
 CREATE OR REPLACE FUNCTION public.fn_next_player(p_room uuid, p_current uuid)
 RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
+LANGUAGE sql
+SECURITY INVOKER
 SET search_path = public
 AS $$
-DECLARE
-  next_id uuid;
-BEGIN
-  -- Naive implementation: just pick a different player in room
-  SELECT p.id
-  INTO next_id
-  FROM public.players p
-  WHERE p.room_id = p_room
-    AND p.id <> p_current
+  SELECT rp.player_id
+  FROM public.room_players rp
+  WHERE rp.room_id = p_room
+    AND rp.is_spectator = false
+    AND rp.player_id <> p_current
+  ORDER BY rp.joined_at ASC
   LIMIT 1;
-
-  RETURN next_id;
-END;
 $$;
 
-
 -- ===============================================================
--- Build deck for a room
+-- Build deck for a room (service-only)
 -- ===============================================================
 CREATE OR REPLACE FUNCTION public.fn_build_deck(p_room uuid)
 RETURNS void
@@ -108,94 +91,120 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  -- Only service role can build a deck
+  IF (SELECT auth.role()) <> 'service_role' THEN
+    RAISE EXCEPTION 'Access denied';
+  END IF;
+
   INSERT INTO public.room_cards (room_id, card_id, location)
   SELECT p_room, c.id, 'deck'
   FROM public.cards c;
 
-  -- Shuffle order_index
+  -- Shuffle
   UPDATE public.room_cards
   SET order_index = floor(random() * 1000000)::int
   WHERE room_id = p_room AND location = 'deck';
 END;
 $$;
 
-
 -- ===============================================================
--- Draw cards
+-- Draw cards (authenticated player only)
 -- ===============================================================
-CREATE OR REPLACE FUNCTION public.fn_draw(p_room uuid, p_player uuid, p_n int)
+CREATE OR REPLACE FUNCTION public.fn_draw(p_room uuid, p_n int)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  v_uid uuid := (SELECT auth.uid());
   drawn RECORD;
 BEGIN
+  -- Must be logged in
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  -- Must belong to room and not spectator
+  IF NOT EXISTS (
+    SELECT 1 FROM public.room_players 
+    WHERE player_id = v_uid AND room_id = p_room AND is_spectator = false
+  ) THEN
+    RAISE EXCEPTION 'You are not a player in this room';
+  END IF;
+
   FOR drawn IN
-    SELECT rc.id
-    FROM public.room_cards rc
-    WHERE rc.room_id = p_room
-      AND rc.location = 'deck'
-    ORDER BY rc.order_index ASC
+    SELECT id
+    FROM public.room_cards
+    WHERE room_id = p_room AND location = 'deck'
+    ORDER BY order_index ASC
     LIMIT p_n
   LOOP
     UPDATE public.room_cards
     SET location = 'hand',
-        owner_id = p_player
+        owner_id = v_uid
     WHERE id = drawn.id;
   END LOOP;
 END;
 $$;
 
-
 -- ===============================================================
--- Player draw wrapper
+-- Play card (authenticated player only)
 -- ===============================================================
-CREATE OR REPLACE FUNCTION public.fn_player_draw(p_room uuid, p_player uuid, p_n int)
+CREATE OR REPLACE FUNCTION public.fn_play_card(p_room uuid, p_card uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_uid uuid := (SELECT auth.uid());
+  next_player uuid;
 BEGIN
-  PERFORM public.fn_draw(p_room, p_player, p_n);
-END;
-$$;
-
-
--- ===============================================================
--- Play a card
--- ===============================================================
-CREATE OR REPLACE FUNCTION public.fn_play_card(p_room uuid, p_player uuid, p_card uuid)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  IF NOT public.fn_is_playable(p_room, p_card) THEN
-    RAISE EXCEPTION 'Card % is not playable', p_card;
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
   END IF;
 
+  -- Must be player in room
+  IF NOT EXISTS (
+    SELECT 1 FROM public.room_players
+    WHERE player_id = v_uid AND room_id = p_room AND is_spectator = false
+  ) THEN
+    RAISE EXCEPTION 'You are not a player in this room';
+  END IF;
+
+  -- Game must be started
+  IF NOT EXISTS (
+    SELECT 1 FROM public.rooms WHERE id = p_room AND started = true
+  ) THEN
+    RAISE EXCEPTION 'Game not started';
+  END IF;
+
+  -- Card must be playable
+  IF NOT public.fn_is_playable(p_room, p_card) THEN
+    RAISE EXCEPTION 'Card % not playable', p_card;
+  END IF;
+
+  -- Transfer card to discard
   UPDATE public.room_cards
   SET location = 'discard',
       owner_id = NULL,
       order_index = floor(random() * 1000000)::int
   WHERE room_id = p_room
     AND card_id = p_card
-    AND owner_id = p_player;
+    AND owner_id = v_uid;
 
-  -- Update turn
+  -- Advance turn
+  next_player := public.fn_next_player(p_room, v_uid);
   UPDATE public.rooms
-  SET turn_player_id = public.fn_next_player(p_room, p_player)
+  SET turn_player_id = next_player,
+      current_card = p_card
   WHERE id = p_room;
 END;
 $$;
 
-
 -- ===============================================================
--- Start a game
+-- Start game (host-only, uses auth.uid())
 -- ===============================================================
 CREATE OR REPLACE FUNCTION public.fn_start_game(p_room uuid, p_cards_per int)
 RETURNS void
@@ -204,19 +213,42 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  v_uid uuid := (SELECT auth.uid());
   p RECORD;
 BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  -- Verify host
+  IF NOT EXISTS (
+    SELECT 1 FROM public.room_players
+    WHERE room_id = p_room AND player_id = v_uid AND is_host = true
+  ) THEN
+    RAISE EXCEPTION 'Only host can start this game';
+  END IF;
+
+  -- Build deck (using service role)
   PERFORM public.fn_build_deck(p_room);
 
-  FOR p IN SELECT id FROM public.players WHERE room_id = p_room
+  -- Deal cards to each player
+  FOR p IN
+    SELECT player_id
+    FROM public.room_players
+    WHERE room_id = p_room AND is_spectator = false
   LOOP
-    PERFORM public.fn_draw(p_room, p.id, p_cards_per);
+    PERFORM public.fn_draw(p_room, p_cards_per);
   END LOOP;
 
+  -- Mark game started
   UPDATE public.rooms
   SET started = true,
       turn_player_id = (
-        SELECT id FROM public.players WHERE room_id = p_room LIMIT 1
+        SELECT player_id
+        FROM public.room_players
+        WHERE room_id = p_room AND is_spectator = false
+        ORDER BY joined_at ASC
+        LIMIT 1
       )
   WHERE id = p_room;
 END;
