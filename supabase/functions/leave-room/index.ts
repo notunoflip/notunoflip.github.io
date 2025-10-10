@@ -1,67 +1,72 @@
-// supabase/functions/leave-room.ts
-import { serve } from "https://deno.land/std@0.181.0/http/server.ts";
-import getServiceClient from "../_shared/supabaseClient.ts";
+import { corsHeaders } from "../_shared/cors.ts";
+import {
+  getServiceClient,
+  requireUser,
+  parseJSONBody,
+  json,
+  jsonError,
+} from "../_shared/helpers.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing Authorization header" }), { status: 401 });
+    // 🔑 Authenticate user
+    const { user, error: authError } = await requireUser(req);
+    if (authError) return authError;
+
+    // 🧠 Parse JSON body
+    const { roomId } = await parseJSONBody<{ roomId: string }>(req);
+    if (!roomId || typeof roomId !== "string") {
+      return jsonError("Missing or invalid roomId", 400);
     }
 
-    const supabase = getServiceClient(authHeader);
+    const supabase = getServiceClient();
 
-    // Verify user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid or missing user" }), { status: 401 });
+    // 🧹 Remove player from room_players
+    const { error: leaveError } = await supabase
+      .from("room_players")
+      .delete()
+      .eq("room_id", roomId)
+      .eq("player_id", user.id);
+
+    if (leaveError) {
+      console.error("leaveError", leaveError);
+      return jsonError(leaveError.message, 500);
     }
 
-    const playerId = user.id;
-
-    // Find the player’s current room
-    const { data: player, error: playerError } = await supabase
-      .from("players")
-      .select("room_id")
-      .eq("id", playerId)
-      .maybeSingle();
-
-    if (playerError || !player?.room_id) {
-      return new Response(JSON.stringify({ error: "Player not in a room" }), { status: 400 });
-    }
-
-    const roomId = player.room_id;
-
-    // Fetch room and all players
-    const { data: room } = await supabase
+    // 🏠 Check if user was host
+    const { data: hostCheck, error: hostCheckError } = await supabase
       .from("rooms")
-      .select("host_id")
+      .select("id, host_id")
       .eq("id", roomId)
-      .maybeSingle();
+      .single();
 
-    const { data: players } = await supabase
-      .from("players")
-      .select("id")
-      .eq("room_id", roomId);
-
-    // Remove this player from room
-    await supabase.from("players").update({ room_id: null }).eq("id", playerId);
-
-    // If host leaves
-    if (room?.host_id === playerId) {
-      const remaining = players?.filter((p) => p.id !== playerId);
-      if (remaining?.length === 0) {
-        await supabase.from("rooms").delete().eq("id", roomId);
-        return new Response(JSON.stringify({ success: true, message: "Room deleted" }), { status: 200 });
-      } else {
-        await supabase.from("rooms").update({ host_id: remaining[0].id }).eq("id", roomId);
-        return new Response(JSON.stringify({ success: true, message: "Host transferred" }), { status: 200 });
-      }
+    if (hostCheckError) {
+      console.error("hostCheckError", hostCheckError);
+      return jsonError(hostCheckError.message, 500);
     }
 
-    return new Response(JSON.stringify({ success: true, message: "Left room" }), { status: 200 });
+    if (hostCheck && hostCheck.host_id === user.id) {
+      // 🧨 Host leaving → delete room (cascade removes players/cards)
+      const { error: roomDeleteError } = await supabase
+        .from("rooms")
+        .delete()
+        .eq("id", roomId);
+
+      if (roomDeleteError) {
+        console.error("roomDeleteError", roomDeleteError);
+        return jsonError(roomDeleteError.message, 500);
+      }
+
+      return json({ message: "Host left — room deleted." }, 200);
+    }
+
+    // ✅ Success for non-host
+    return json({ message: "Player left room successfully." }, 200);
+
   } catch (err) {
-    console.error("leave-room error:", err);
-    return new Response(JSON.stringify({ error: "Server error" }), { status: 500 });
+    console.error("Unexpected error:", err);
+    return jsonError(String(err), 500);
   }
 });

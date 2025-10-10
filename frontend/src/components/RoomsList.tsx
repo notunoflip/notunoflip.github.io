@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNickname } from "../hooks/useNickname";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 interface Room {
   id: string;
@@ -14,6 +15,7 @@ export default function RoomsList() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const { nickname, loading } = useNickname();
   const LOCAL_EDGE_URL = "http://localhost:54321/functions/v1";
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchRooms = async () => {
@@ -39,8 +41,13 @@ export default function RoomsList() {
 
     try {
       // 🔑 Get current session
-      const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+      const {
+        data: { session },
+        error: sessionErr,
+      } = await supabase.auth.getSession();
       if (sessionErr || !session) throw new Error("No active session");
+
+      toast.info("Joining room...");
 
       const res = await fetch(`${LOCAL_EDGE_URL}/join-room`, {
         method: "POST",
@@ -53,11 +60,14 @@ export default function RoomsList() {
 
       if (!res.ok) throw new Error(await res.text());
 
-      const { room, player } = await res.json();
-      localStorage.setItem("playerId", player.id);
+      const { room, playerId } = await res.json();
+
+      // ✅ Save IDs locally
+      localStorage.setItem("playerId", playerId);
       localStorage.setItem("roomId", room.id);
 
       toast.success(`Joined room ${room.code}`);
+      navigate(`/room/${room.id}`);
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Failed to join room");

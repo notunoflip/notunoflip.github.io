@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.181.0/http/server.ts";
-import getServiceClient from "../_shared/supabaseClient.ts";
+import getServiceClient from "../_shared/helpers.ts";
 
 serve(async (req) => {
   try {

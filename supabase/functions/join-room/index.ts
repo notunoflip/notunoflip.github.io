@@ -1,59 +1,102 @@
 import { serve } from "https://deno.land/std@0.181.0/http/server.ts";
-import getServiceClient from "../_shared/supabaseClient.ts"; 
-
+import {
+  getServiceClient,
+  requireUser,
+  parseJSONBody,
+  json,
+  jsonError,
+} from "../_shared/helpers.ts";
 
 serve(async (req) => {
   try {
-    const supabase = getServiceClient();
-    const authHeader = req.headers.get("authorization")?.replace("Bearer ", "");
-    
-    if (!authHeader) {
-      return new Response(JSON.stringify({ msg: "Missing authorization header" }), { status: 401 });
-    }
+    // 🔒 Auth check
+    const { user, error: authError } = await requireUser(req);
+    if (authError) return authError;
 
-    const { data: { user }, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !user) {
-      return new Response("Unauthorized", { status: 401 });
-    }
+    // 🧾 Parse JSON body
+    const { roomCode, playerName } = await parseJSONBody<{
+      roomCode: string;
+      playerName: string;
+    }>(req);
 
-    const { roomCode, playerName } = await req.json();
     if (!roomCode || !playerName) {
-      return new Response("Missing fields", { status: 400 });
+      return jsonError("Missing fields: roomCode and playerName", 400);
     }
 
-    // check room
+    const supabase = getServiceClient();
+
+    // 🎮 Check if room exists
     const { data: room, error: roomError } = await supabase
       .from("rooms")
       .select("*")
       .eq("code", roomCode)
       .single();
+
     if (roomError || !room) {
-      return new Response("Room not found", { status: 404 });
+      return jsonError("Room not found", 404);
     }
 
-    // update or insert player
-    const { data: player, error: playerError } = await supabase
+    // 🧍 Ensure player exists (create or update nickname)
+    const { data: existingPlayer, error: playerFetchErr } = await supabase
       .from("players")
-      .upsert(
-        { id: user.id, room_id: room.id, nickname: playerName }, 
-        { onConflict: "id" }
-      )
-      .select()
-      .single();
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
 
-    if (playerError) {
-      console.error(playerError);
-      return new Response(playerError.message, { status: 500 });
+    if (playerFetchErr) {
+      console.error(playerFetchErr);
+      return jsonError("Failed to fetch player", 500);
     }
 
-    return new Response(JSON.stringify({ room, player }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    if (!existingPlayer) {
+      const { error: insertErr } = await supabase
+        .from("players")
+        .insert({ id: user.id, nickname: playerName });
 
+      if (insertErr) {
+        console.error(insertErr);
+        return jsonError("Failed to create player", 500);
+      }
+    } else if (existingPlayer.nickname !== playerName) {
+      const { error: updateErr } = await supabase
+        .from("players")
+        .update({ nickname: playerName, updated_at: new Date().toISOString() })
+        .eq("id", user.id);
+
+      if (updateErr) {
+        console.error(updateErr);
+        return jsonError("Failed to update nickname", 500);
+      }
+    }
+
+    // 🔗 Join room (insert into room_players)
+    const { data: existingMembership } = await supabase
+      .from("room_players")
+      .select("*")
+      .eq("room_id", room.id)
+      .eq("player_id", user.id)
+      .maybeSingle();
+
+    if (!existingMembership) {
+      const { error: joinErr } = await supabase.from("room_players").insert({
+        room_id: room.id,
+        player_id: user.id,
+      });
+
+      if (joinErr) {
+        console.error(joinErr);
+        if (joinErr.message.includes("uniq_room_player")) {
+          return jsonError("Already joined this room", 400);
+        }
+        return jsonError("Failed to join room", 500);
+      }
+    }
+
+    // ✅ Success
+    return json({ room, playerId: user.id });
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    return new Response(JSON.stringify({ msg: errorMessage }), {
-      status: 500,
-    });
+    console.error(err);
+    const message = err instanceof Error ? err.message : String(err);
+    return jsonError(message, 500);
   }
 });

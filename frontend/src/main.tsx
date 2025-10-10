@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import Layout from "./Layout";
 import App from "./Lobby";
-import RoomPage from "./RoomPage";
+import Game from "./Game"
 import "./index.css";
 
 const router = createBrowserRouter([
@@ -12,7 +12,7 @@ const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { path: "/", element: <App /> },
-      { path: "/room/:roomId", element: <RoomPage /> },
+      { path: "/room/:roomId", element: <Game /> },
     ],
   },
 ]);

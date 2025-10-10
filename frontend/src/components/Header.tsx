@@ -51,7 +51,9 @@ const Header: React.FC<HeaderProps> = ({ session, onLogout, onSettings }) => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
+        body: JSON.stringify({ roomId }), // ✅ add this line
       });
+
 
 
       if (!res.ok) throw new Error(await res.text());

@@ -1,5 +1,5 @@
 import { corsHeaders } from "../_shared/cors.ts";
-import getServiceClient from "../_shared/supabaseClient.ts";
+import getServiceClient from "../_shared/helpers.ts";
 
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight

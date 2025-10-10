@@ -46,7 +46,7 @@ export default function Layout() {
 
       {/* Main content of the page */}
       <div className="absolute inset-0 bg-gradient-to-br from-green-700 via-green-800 to-green-900 dark:from-gray-700 dark:via-gray-800 dark:to-gray-900">
-        <Outlet />
+        <Outlet context={{ session }} />
       </div>
     </div>
   );

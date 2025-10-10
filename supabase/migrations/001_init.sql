@@ -81,6 +81,11 @@ CREATE UNIQUE INDEX uniq_room_player ON public.room_players(room_id, player_id);
 CREATE INDEX IF NOT EXISTS idx_room_players_room_id ON public.room_players(room_id);
 CREATE INDEX IF NOT EXISTS idx_room_players_player_id ON public.room_players(player_id);
 
+-- Realtime
+ALTER TABLE public.room_players REPLICA IDENTITY FULL;
+
+
+
 -- RLS ===========================================================================
 ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.players ENABLE ROW LEVEL SECURITY;
@@ -155,14 +160,8 @@ CREATE POLICY room_players_select_self_or_host
 ON public.room_players
 FOR SELECT
 USING (
-  player_id = (select auth.uid())
-  OR EXISTS (
-    SELECT 1
-    FROM public.room_players rp
-    WHERE rp.room_id = room_players.room_id
-      AND rp.player_id = (select auth.uid())
-      AND rp.is_host = true
-  )
+  player_id = auth.uid()
+  OR is_host = true  -- only the host flag on that row
 );
 
 -- Merge self and host update policies into one
