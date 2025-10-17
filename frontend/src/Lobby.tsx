@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 import RoomsList from "./components/RoomsList";
 import { toast } from "sonner";
 
-const LOCAL_EDGE_URL = "http://localhost:54321/functions/v1";
+const LOCAL_EDGE_URL = import.meta.env.VITE_EDGE_URL;
 
 export default function Lobby() {
   const [session, setSession] = useState<Session | null>(null);

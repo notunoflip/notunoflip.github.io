@@ -70,7 +70,7 @@ CREATE TABLE public.room_players (
   room_id uuid REFERENCES public.rooms(id) ON DELETE CASCADE,
   player_id uuid REFERENCES public.players(id) ON DELETE CASCADE,
   is_host boolean DEFAULT false,
-  is_ready boolean DEFAULT false;
+  is_ready boolean DEFAULT false,
   is_spectator boolean DEFAULT false,
   joined_at timestamptz DEFAULT now()
 );
