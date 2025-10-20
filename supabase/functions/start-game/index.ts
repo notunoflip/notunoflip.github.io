@@ -1,24 +1,21 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import {
   getServiceClient,
-  requireUser,
-  parseJSONBody,
   json,
   jsonError,
+  parseJSONBody,
+  requireUser,
 } from "../_shared/helpers.ts";
 
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-
-    
     return new Response(null, { headers: corsHeaders });
   }
 
   // ✅ Authenticate user from token
   const { user, error: authError } = await requireUser(req);
   if (authError) return authError;
-
 
   try {
     const { room_id, cards_per_player } = await parseJSONBody<{
@@ -44,7 +41,6 @@ Deno.serve(async (req: Request) => {
     if (room.host_id !== user.id) {
       return jsonError("Only host can start the game", 403);
     }
-
 
     // ✅ Check player count (minimum 2)
     const { count, error: countErr } = await supabase
@@ -74,6 +70,10 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true });
   } catch (err) {
     console.error("Start game failed:", err);
-    return jsonError(err.message ?? "Internal server error", 500);
+    const message = err instanceof Error
+      ? err.message
+      : "Internal server error";
+
+    return jsonError(message, 500);
   }
 });

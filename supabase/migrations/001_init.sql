@@ -44,9 +44,11 @@ CREATE TABLE public.rooms (
   current_card uuid,
   direction text DEFAULT 'clockwise' CHECK (direction IN ('clockwise','counterclockwise')),
   draw_stack int DEFAULT 0,
-  started boolean DEFAULT false,
-  private boolean DEFAULT false,
-  created_at timestamptz DEFAULT now()
+  started_game boolean DEFAULT false,
+  private_game boolean DEFAULT false,
+  created_at timestamptz DEFAULT now(),
+  last_turn_started_at timestamptz DEFAULT now(),
+  turn_duration int DEFAULT 30
 );
 CREATE UNIQUE INDEX one_room_per_host ON public.rooms(host_id);
 CREATE INDEX idx_rooms_code ON public.rooms(code);
@@ -60,8 +62,6 @@ CREATE TABLE public.players (
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
-
-
 
 
 -- === ROOM_PLAYERS ==========================================
@@ -78,9 +78,6 @@ CREATE UNIQUE INDEX uniq_room_player ON public.room_players(room_id, player_id);
 CREATE INDEX idx_room_players_room_id ON public.room_players(room_id);
 CREATE INDEX idx_room_players_player_id ON public.room_players(player_id);
 
--- Realtime support
-ALTER TABLE public.room_players REPLICA IDENTITY FULL;
-
 
 -- === ROOM_CARDS ============================================
 CREATE TABLE public.room_cards (
@@ -88,12 +85,10 @@ CREATE TABLE public.room_cards (
   room_id uuid REFERENCES public.rooms(id) ON DELETE CASCADE,
   card_id uuid REFERENCES public.cards(id) ON DELETE CASCADE,
   owner_id uuid,
-  location text CHECK (location IN ('deck','discard','hand')) NOT NULL,
-  order_index int,
-  turn_start timestamptz DEFAULT now(),
-  turn_duration int DEFAULT 30
+  pile text CHECK (pile IN ('deck','discard','hand')) NOT NULL,
+  order_index int
 );
-CREATE INDEX idx_room_cards_room_order ON public.room_cards(room_id, location, order_index DESC);
+CREATE INDEX idx_room_cards_room_order ON public.room_cards(room_id, pile, order_index DESC);
 CREATE INDEX idx_room_cards_room_id ON public.room_cards(room_id);
 CREATE INDEX idx_room_cards_card_id ON public.room_cards(card_id);
 
@@ -105,27 +100,50 @@ CREATE INDEX idx_room_cards_card_id ON public.room_cards(card_id);
 -- Returns only visible card information depending on ownership and room side
 CREATE OR REPLACE VIEW public.secure_room_cards AS
 SELECT
-  rc.id AS room_card_id,
-  rc.room_id,
-  rc.card_id,
-  rc.owner_id,
-  rc.location,
-  rc.order_index,
-  CASE
-    WHEN rc.owner_id = auth.uid() THEN
-      jsonb_build_object(
-        'light', jsonb_build_object('color', c.light_color, 'value', c.light_value),
-        'dark',  jsonb_build_object('color', c.dark_color,  'value', c.dark_value)
-      )
-    ELSE
-      jsonb_build_object(
-        'side', rooms.current_side,
-        'color', CASE WHEN rooms.current_side = 'light' THEN c.light_color ELSE c.dark_color END,
-        'value', CASE WHEN rooms.current_side = 'light' THEN c.light_value ELSE c.dark_value END
-      )
-  END AS visible_card
+    rc.id AS room_card_id,
+    rc.room_id,
+    rc.card_id,
+    rc.owner_id,
+    p.nickname,  -- Added nickname
+    rc.pile,
+    rc.order_index,
+    CASE
+        -- Our own cards: show full light + dark
+        WHEN rc.owner_id = auth.uid() THEN
+            jsonb_build_object(
+                'light', jsonb_build_object('color', c.light_color, 'value', c.light_value),
+                'dark',  jsonb_build_object('color', c.dark_color,  'value', c.dark_value)
+            )
+
+        -- Discard pile: show only top card
+        WHEN rc.pile = 'discard' AND rc.order_index = (
+            SELECT MAX(order_index) 
+            FROM public.room_cards 
+            WHERE room_id = rc.room_id AND pile = 'discard'
+        ) THEN
+            jsonb_build_object(
+                'side', rooms.current_side,
+                'color', CASE WHEN rooms.current_side = 'dark' THEN c.dark_color ELSE c.light_color END,
+                'value', CASE WHEN rooms.current_side = 'dark' THEN c.dark_value ELSE c.light_value END
+            )
+
+        -- Other players' cards: show only the visible side
+        ELSE
+            jsonb_build_object(
+                'side', rooms.current_side,
+                'color', CASE WHEN rooms.current_side = 'dark' THEN c.dark_color ELSE c.light_color END,
+                'value', CASE WHEN rooms.current_side = 'dark' THEN c.dark_value ELSE c.light_value END
+            )
+    END AS visible_card
 FROM public.room_cards rc
 JOIN public.cards c ON c.id = rc.card_id
-JOIN public.rooms rooms ON rooms.id = rc.room_id;
+JOIN public.rooms rooms ON rooms.id = rc.room_id
+JOIN public.players p ON p.id = rc.owner_id  -- Join to get nickname
+WHERE rc.pile = 'hand' OR rc.pile = 'discard';
 
-GRANT SELECT ON public.secure_room_cards TO authenticated;
+
+
+
+-- Enable realtime replication for your tables
+ALTER PUBLICATION supabase_realtime ADD TABLE public.rooms;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.room_players;

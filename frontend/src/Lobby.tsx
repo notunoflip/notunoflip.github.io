@@ -75,7 +75,7 @@ export default function Lobby() {
       .upsert({ id: session.user.id, nickname: nicknameInput }, { onConflict: "id" });
 
     if (error) {
-      toast.error("Failed to save nickname");
+      toast.error("Nickname taken. Choose another one");
       console.error(error);
       return;
     }

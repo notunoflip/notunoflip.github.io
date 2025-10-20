@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNickname } from "../hooks/useNickname";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useNavigate} from "react-router-dom";
 
 interface Room {
   id: string;
   code: string;
-  started: boolean;
+  started_game: boolean;
   created_at: string;
 }
 
@@ -17,22 +17,97 @@ export default function RoomsList() {
   const LOCAL_EDGE_URL = "http://localhost:54321/functions/v1";
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchRooms = async () => {
-      const { data, error } = await supabase
-        .from("rooms")
-        .select("id, code, started, created_at");
+  // =========================================
+  // Initial Fetch
+  // =========================================
+useEffect(() => {
+  const fetchRooms = async (access_token?: string) => {
+    const { data, error } = await supabase
+      .from("rooms")
+      .select("id, code, started_game, created_at")
+      .order("created_at", { ascending: false });
 
-      if (error) {
-        toast.error("Failed to fetch rooms");
-        console.error(error);
-      } else if (data) {
-        setRooms(data as Room[]);
-      }
+    if (error) {
+      toast.error("Failed to fetch rooms");
+      console.error(error);
+    } else {
+      setRooms(data as Room[]);
+    }
+  };
+
+  const init = async () => {
+    const { data, error } = await supabase.auth.getSession();
+    const session = data?.session;
+
+    if (error) {
+      console.error("Error fetching session:", error);
+      return;
+    }
+
+    if (session) {
+      fetchRooms(session.access_token);
+    } else {
+      // Listen for login event
+      const { data: listener } = supabase.auth.onAuthStateChange(
+        (event, session) => {
+          if (session) {
+            fetchRooms(session.access_token);
+          }
+        }
+      );
+
+      return () => listener.subscription.unsubscribe();
+    }
+  };
+
+  init();
+}, []);
+
+  // =========================================
+  // Realtime Subscriptions
+  // =========================================
+  useEffect(() => {
+    const channel = supabase
+      .channel("realtime-rooms")
+      .on(
+        "postgres_changes",
+        {
+          event: "*", // listen to INSERT, UPDATE, DELETE
+          schema: "public",
+          table: "rooms",
+        },
+        (payload) => {
+          console.log("Realtime change:", payload);
+
+          setRooms((current) => {
+            switch (payload.eventType) {
+              case "INSERT":
+                return [payload.new as Room, ...current];
+
+              case "UPDATE":
+                return current.map((r) =>
+                  r.id === payload.new.id ? (payload.new as Room) : r
+                );
+
+              case "DELETE":
+                return current.filter((r) => r.id !== payload.old.id);
+
+              default:
+                return current;
+            }
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
-    fetchRooms();
   }, []);
 
+  // =========================================
+  // Join Room Handler
+  // =========================================
   const handleJoinRoom = async (roomCode: string) => {
     if (!nickname) {
       toast.error("Set your nickname first.");
@@ -40,11 +115,11 @@ export default function RoomsList() {
     }
 
     try {
-      // 🔑 Get current session
       const {
         data: { session },
         error: sessionErr,
       } = await supabase.auth.getSession();
+
       if (sessionErr || !session) throw new Error("No active session");
 
       toast.info("Joining room...");
@@ -62,7 +137,6 @@ export default function RoomsList() {
 
       const { room, playerId } = await res.json();
 
-      // ✅ Save IDs locally
       localStorage.setItem("playerId", playerId);
       localStorage.setItem("roomId", room.id);
 
@@ -76,6 +150,9 @@ export default function RoomsList() {
 
   if (loading) return <p>Loading nickname...</p>;
 
+  // =========================================
+  // Render
+  // =========================================
   return (
     <div className="p-4 text-white">
       <h2 className="font-bold mb-2">Lobbies</h2>
@@ -87,9 +164,9 @@ export default function RoomsList() {
           >
             <div>
               <p>Code: {r.code}</p>
-              <p>Status: {r.started ? "In Progress" : "Waiting"}</p>
+              <p>Status: {r.started_game ? "In Progress" : "Waiting"}</p>
             </div>
-            {!r.started && (
+            {!r.started_game && (
               <button
                 className="px-3 py-1 bg-green-500 rounded"
                 onClick={() => handleJoinRoom(r.code)}

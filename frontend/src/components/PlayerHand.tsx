@@ -1,8 +1,21 @@
 import { Card } from "./Card";
 import type { CardColor, CardValue } from "./Card";
 
+interface VisibleCard {
+  visible_card: {
+    dark: {
+      color: CardColor | null;
+      value: CardValue;
+    };
+    light: {
+      color: CardColor | null;
+      value: CardValue;
+    };
+  };
+}
+
 interface PlayerHandProps {
-  cards: { color: CardColor; value: CardValue }[];
+  cards: VisibleCard[];
   isCurrentPlayer?: boolean;
   position?: "bottom" | "top" | "left" | "right";
   playerName?: string;
@@ -75,28 +88,36 @@ export const PlayerHand = ({
           flexDirection: layout.flexDirection,
         }}
       >
-        {cards.map((card, index) => (
-          <div
-            key={index}
-            className="absolute"
-            style={
-              position === "top" || position === "bottom"
-                ? { left: `${index * 30}px`, top: 0, zIndex: index }
-                : { top: `${index * 30}px`, left: 0, zIndex: index }
-            }
-          >
-            <Card
-              color={card.color}
-              value={card.value}
-              isFlipped={!isCurrentPlayer}
-              isHoverable={isCurrentPlayer}
-              onDragEnd={handleCardDragEnd(index)}
-              delay={index * 100}
-              index={index}
-              rotation={baseRotation}
-            />
-          </div>
-        ))}
+        {cards.map((card, index) => {
+          const lightColor = card.visible_card.light.color;
+          const darkColor = card.visible_card.dark.color;
+          const lightValue = card.visible_card.light.value;
+          const darkValue = card.visible_card.dark.value;
+
+          return (
+            <div
+              key={index}
+              className="absolute"
+              style={
+                position === "top" || position === "bottom"
+                  ? { left: `${index * 30}px`, top: 0, zIndex: index }
+                  : { top: `${index * 30}px`, left: 0, zIndex: index }
+              }
+            >
+              <Card
+                lightColor={lightColor}
+                darkColor={darkColor}
+                lightValue={lightValue}
+                darkValue={darkValue}
+                isFlipped={!isCurrentPlayer}
+                isHoverable={isCurrentPlayer}
+                onDragEnd={handleCardDragEnd(index)}
+                delay={index * 100}
+                rotation={baseRotation}
+              />
+            </div>
+          );
+        })}
       </div>
       {isCurrentPlayer && (
         <div className="text-gray-100 font-semibold text-sm bg-white/20 px-3 py-1 rounded-full backdrop-blur-sm">
