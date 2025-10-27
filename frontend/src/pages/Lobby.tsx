@@ -2,12 +2,12 @@
 //  root.classList.remove("dark");
 
 import { useState, useEffect } from "react";
-import { supabase } from "./lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
-import Auth from "./components/Auth";
-import Modal from "./components/ui/Modal";
+import Auth from "../components/Auth";
+import Modal from "../components/ui/Modal";
 import { useNavigate } from "react-router-dom";
-import RoomsList from "./components/RoomsList";
+import RoomsList from "../components/RoomsList";
 import { toast } from "sonner";
 
 const LOCAL_EDGE_URL = import.meta.env.VITE_EDGE_URL;

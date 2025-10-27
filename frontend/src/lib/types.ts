@@ -1,20 +1,44 @@
 // src/lib/types.ts
+
+// ✅ Include both light and dark-side UNO Flip colors
 export type CardColor =
   | "red"
   | "yellow"
   | "green"
   | "blue"
+  | "orange"
+  | "purple"
+  | "pink"
+  | "light_blue"
+  | "black"
   | null;
 
+// ✅ Full list of UNO and UNO Flip card values
 export type CardValue =
-  | "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
-  | "skip" | "reverse" | "draw_one" | "draw_two" | "wild" | "wild_draw_two"
+  | "0"
+  | "1"
+  | "2"
+  | "3"
+  | "4"
+  | "5"
+  | "6"
+  | "7"
+  | "8"
+  | "9"
+  | "skip"
+  | "reverse"
+  | "draw_one"
+  | "draw_two"
+  | "draw_five"
+  | "wild"
+  | "wild_draw_two"
+  | "wild_draw_color"
   | "skip_everyone"
   | "flip"
   | null;
 
-// Each card may represent either both sides (light/dark) or just one
-export interface DualSidedVisibleCard {
+// ✅ Every visible card is dual-sided (light + dark)
+export interface VisibleCard {
   dark: {
     color: CardColor;
     value: CardValue;
@@ -25,14 +49,7 @@ export interface DualSidedVisibleCard {
   };
 }
 
-export interface SingleSidedVisibleCard {
-  side: "light" | "dark";
-  color: CardColor;
-  value: CardValue;
-}
-
-export type VisibleCard = DualSidedVisibleCard | SingleSidedVisibleCard;
-
+// ✅ Player's card data
 export interface PlayerCard {
   room_card_id: string;
   owner_id: string;
@@ -40,12 +57,12 @@ export interface PlayerCard {
   visible_card: VisibleCard;
 }
 
-
+// ✅ Props for <Card /> component
 export interface CardProps {
-  lightColor?: CardColor | null;
-  lightValue?: CardValue;
-  darkColor?: CardColor | null;
-  darkValue?: CardValue;
+  lightColor: CardColor;
+  lightValue: CardValue;
+  darkColor: CardColor;
+  darkValue: CardValue;
   isFlipped?: boolean;
   showBothSides?: boolean;
   isDarkSide?: boolean;

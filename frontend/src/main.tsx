@@ -3,10 +3,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import Layout from "./Layout";
-import Lobby from "./Lobby";
-import Game from "./Game"
+import Lobby from "./pages/Lobby";
+import Game from "./pages/Game"
 import "./index.css";
-import NotFound from "./NotFound";
+import NotFound from "./pages/NotFound";
 
 const router = createBrowserRouter([
   {

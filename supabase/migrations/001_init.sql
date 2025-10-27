@@ -29,8 +29,7 @@ CREATE TABLE public.cards (
   light_color text,
   light_value text,
   dark_color text,
-  dark_value text,
-  is_wild boolean DEFAULT false
+  dark_value text
 );
 
 
@@ -123,16 +122,16 @@ SELECT
         ) THEN
             jsonb_build_object(
                 'side', rooms.current_side,
-                'color', CASE WHEN rooms.current_side = 'dark' THEN c.dark_color ELSE c.light_color END,
-                'value', CASE WHEN rooms.current_side = 'dark' THEN c.dark_value ELSE c.light_value END
+                'color', CASE WHEN rooms.current_side = 'light' THEN c.dark_color ELSE c.light_color END,
+                'value', CASE WHEN rooms.current_side = 'light' THEN c.dark_value ELSE c.light_value END
             )
 
         -- Other players' cards: show only the visible side
         ELSE
             jsonb_build_object(
                 'side', rooms.current_side,
-                'color', CASE WHEN rooms.current_side = 'dark' THEN c.dark_color ELSE c.light_color END,
-                'value', CASE WHEN rooms.current_side = 'dark' THEN c.dark_value ELSE c.light_value END
+                'color', CASE WHEN rooms.current_side = 'light' THEN c.dark_color ELSE c.light_color END,
+                'value', CASE WHEN rooms.current_side = 'light' THEN c.dark_value ELSE c.light_value END
             )
     END AS visible_card
 FROM public.room_cards rc
