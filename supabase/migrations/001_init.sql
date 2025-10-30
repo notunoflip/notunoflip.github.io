@@ -129,7 +129,7 @@ SELECT
         -- Other players' cards: show only the visible side
         ELSE
             jsonb_build_object(
-                'side', rooms.current_side,
+                'side', CASE WHEN rooms.current_side = 'light' THEN 'dark' ELSE 'light' END,
                 'color', CASE WHEN rooms.current_side = 'light' THEN c.dark_color ELSE c.light_color END,
                 'value', CASE WHEN rooms.current_side = 'light' THEN c.dark_value ELSE c.light_value END
             )

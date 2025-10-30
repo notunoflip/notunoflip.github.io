@@ -1,4 +1,4 @@
-import { useState, type JSX } from "react";
+import { useState, useEffect, type JSX } from "react";
 import { motion } from "framer-motion";
 import { SkipForward, RotateCcw, Plus, Palette } from "lucide-react";
 import type { CardValue, CardProps } from "../lib/types";
@@ -24,7 +24,7 @@ const DARK_MAP: Record<string, string> = {
 
 const getColor = (color?: string, dark?: boolean) =>
   COLORS[
-  (dark ? DARK_MAP[color ?? ""] : color) as keyof typeof COLORS
+    (dark ? DARK_MAP[color ?? ""] : color) as keyof typeof COLORS
   ] ?? COLORS.black;
 
 const getIcon = (v?: CardValue, small = false) => {
@@ -45,7 +45,6 @@ const getIcon = (v?: CardValue, small = false) => {
     wild_draw_two: num("2"),
     wild_draw_five: num("5"),
     wild: <Palette className={sz} />,
-    // draw_until: <Infinity className={sz} />,
     wild_draw_color: <Palette className={sz} />,
     flip: <RotateCcw className={sz} />,
   };
@@ -65,27 +64,44 @@ export const Card = ({
   className = "",
   style,
   rotation = 0,
+  showBothSides = false,
+  isDarkSide = false,
 }: CardProps) => {
   const [flipped, setFlipped] = useState(isFlipped);
+
+  // automatically flip based on showBothSides and isDarkSide
+  useEffect(() => {
+    if (showBothSides) {
+      setFlipped(isDarkSide);
+    } else {
+      // hide card content if not ours (opponent’s card)
+      setFlipped(!isDarkSide);
+    }
+  }, [showBothSides, isDarkSide]);
+
   const flip = () => {
-    setFlipped(!flipped);
-    onClick?.();
+    if (showBothSides) {
+      setFlipped(!flipped);
+      onClick?.();
+    }
   };
 
   const side = (color?: string, value?: CardValue, dark = false) => (
     <div
-      className={`absolute inset-0 rounded-xl shadow-lg border-4 ${dark ? "border-purple-900" : "border-white"
-        } flex items-center justify-center ${getColor(color, dark)}`}
+      className={`absolute inset-0 rounded-xl shadow-lg border-4 ${
+        dark ? "border-purple-900" : "border-white"
+      } flex items-center justify-center ${getColor(color, dark)}`}
       style={{ transform: dark ? "rotateY(180deg)" : undefined, backfaceVisibility: "hidden" }}
     >
-      <div className="absolute top-1 left-2 text-white drop-shadow">{getIcon(value, true)}</div>
+      <div className="absolute top-1 left-2 text-white drop-shadow">
+        {getIcon(value, true)}
+      </div>
       <div className="text-white">{getIcon(value)}</div>
       <div className="absolute bottom-1 right-2 text-white drop-shadow rotate-180">
         {getIcon(value, true)}
       </div>
     </div>
   );
-
 
   return (
     <motion.div

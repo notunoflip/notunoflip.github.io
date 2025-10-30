@@ -22,51 +22,60 @@ export const GameTable = ({
 }: GameTableProps) => {
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
 
-  if (!cards?.length)
+  if (!cards || cards.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400">
         Waiting for cards...
       </div>
     );
+  }
 
-  // Group by owner
-  const grouped = cards.reduce<Record<string, PlayerCard[]>>((acc, c) => {
-    (acc[c.owner_id] ||= []).push(c);
+  // Group cards by owner
+  const grouped = cards.reduce<Record<string, PlayerCard[]>>((acc, card) => {
+    if (!acc[card.owner_id]) acc[card.owner_id] = [];
+    acc[card.owner_id].push(card);
     return acc;
   }, {});
 
-  const players = Object.entries(grouped).map(([ownerId, cards]) => ({
+  const players = Object.entries(grouped).map(([ownerId, playerCards]) => ({
     id: ownerId,
-    nickname: cards[0]?.nickname || "Player",
-    cards,
+    nickname: playerCards[0]?.nickname || "Player",
+    cards: playerCards,
   }));
 
   const currentIndex = players.findIndex((p) => p.id === currentUserId);
-  const numPlayers = players.length;
+  const numPlayers = players.length || 1;
   const angleStep = 360 / numPlayers;
 
-  const getPlayerPosition = (i: number) => {
-    const rel = (i - currentIndex + numPlayers) % numPlayers;
-    const angle = rel * angleStep + 90;
-    const r = 250;
+  const getPlayerPosition = (index: number) => {
+    const relativeIndex = (index - currentIndex + numPlayers) % numPlayers;
+    const angle = relativeIndex * angleStep + 90; // bottom = current player
+    const radius = 250;
     const rad = (angle * Math.PI) / 180;
+
+    const x = radius * Math.cos(rad);
+    const y = radius * Math.sin(rad);
+
     return {
-      transform: `translate(${r * Math.cos(rad)}px, ${r * Math.sin(rad)}px)`,
+      transform: `translate(${x}px, ${y}px)`,
+      rotation: angle + 90,
     };
   };
 
+  // Helper for fanned layout
   const getFanStyle = (index: number, total: number, spread = 60) => {
-    const start = -spread / 2;
+    const startAngle = -spread / 2;
     const step = total > 1 ? spread / (total - 1) : 0;
-    const rotation = start + index * step;
-    const offsetX = index * 30 - ((total - 1) * 30) / 2;
+    const rotation = startAngle + index * step;
+    const offsetX = index * 30 - ((total - 1) * 30) / 2; // slight horizontal offset
     return { rotation, offsetX };
   };
 
   return (
-    <div className="relative w-full h-[80vh] flex items-center justify-center">
+    <div className=" relative w-full h-[80vh] flex items-center justify-center">
       {/* Center piles */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-4">
+        {/* Discard pile */}
         {discardPile && (
           <Card
             lightColor={discardPile.color}
@@ -76,6 +85,8 @@ export const GameTable = ({
             isDarkSide={isDarkSide}
           />
         )}
+
+        {/* Draw pile */}
         <button onClick={onDrawCard}>
           <Card
             lightColor="blue"
@@ -104,7 +115,19 @@ export const GameTable = ({
 
             <div className="relative h-32 w-full flex justify-center mt-2">
               {player.cards.map((card, index) => {
-                const { light, dark } = card.visible_card;
+                let light: { color: CardColor | null; value: CardValue | null } = {
+                  color: null,
+                  value: null,
+                };
+                let dark: { color: CardColor | null; value: CardValue | null } = {
+                  color: null,
+                  value: null,
+                };
+
+                if ("light" in card.visible_card && "dark" in card.visible_card) {
+                  light = card.visible_card.light;
+                  dark = card.visible_card.dark;
+                } 
                 const { rotation, offsetX } = getFanStyle(index, player.cards.length);
 
                 return (
@@ -125,14 +148,14 @@ export const GameTable = ({
                     }}
                   >
                     <Card
-                      lightColor={light.color}
-                      lightValue={light.value}
-                      darkColor={dark.color}
-                      darkValue={dark.value}
+                      lightColor={light.color ?? "red"}
+                      lightValue={light.value ?? "0"}
+                      darkColor={dark.color ?? "blue"}
+                      darkValue={dark.value ?? "flip"}
                       isFlipped={false}
                       showBothSides={isCurrent}
                       isDarkSide={isDarkSide}
-                      isHoverable={false}
+                      isHoverable={false} // disable hover
                       rotation={rotation}
                     />
                   </motion.div>

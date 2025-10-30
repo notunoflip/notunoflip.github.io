@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { GameTable } from "../components/GameTable";
 import GameWaiting from "../components/GameWaiting";
 import type { Session } from "@supabase/supabase-js";
-import type { PlayerCard, VisibleCard } from "../lib/types";
+import type { PlayerCard } from "../lib/types";
 
 const LOCAL_EDGE_URL = import.meta.env.VITE_EDGE_URL;
 
@@ -101,21 +101,36 @@ export default function Game() {
         return;
       }
 
+      console.log(data)
+
       // ✅ Normalize all visible_card objects to have full structure
       const formatted: PlayerCard[] = data.map((c: any) => {
         const vc = c.visible_card ?? {};
-        const visible_card: VisibleCard = {
-          light: {
-            color: vc.light?.color ?? "black",
-            value: vc.light?.value ?? null,
-          },
-          dark: {
-            color: vc.dark?.color ?? "black",
-            value: vc.dark?.value ?? null,
-          },
-        };
-        return { ...c, visible_card };
+        const def = { color: "black", value: null };
+
+        let light = def;
+        let dark = def;
+
+        // Case 1: both sides provided
+        if (vc.light || vc.dark) {
+          light = { color: vc.light?.color ?? "black", value: vc.light?.value ?? null };
+          dark = { color: vc.dark?.color ?? "black", value: vc.dark?.value ?? null };
+        }
+
+        // Case 2: single side provided
+        else if (vc.side === "light" || vc.side === "dark") {
+          const sideData = { color: vc.color ?? "black", value: vc.value ?? null };
+          if (vc.side === "light") light = sideData;
+          else dark = sideData;
+        }
+
+        // Return normalized structure
+        return { ...c, visible_card: { light, dark } };
       });
+
+
+      console.log(formatted)
+
 
       setTableCards(formatted);
     };
@@ -171,11 +186,10 @@ export default function Game() {
               <button
                 onClick={handleStartGame}
                 disabled={starting}
-                className={`px-5 py-2 rounded-xl shadow-md transition ${
-                  starting
-                    ? "bg-gray-500 cursor-not-allowed"
-                    : "bg-green-600 hover:bg-green-700 text-white"
-                }`}
+                className={`px-5 py-2 rounded-xl shadow-md transition ${starting
+                  ? "bg-gray-500 cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-700 text-white"
+                  }`}
               >
                 {starting ? (
                   <span className="flex items-center justify-center gap-2">
