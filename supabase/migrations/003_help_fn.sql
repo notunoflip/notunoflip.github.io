@@ -257,23 +257,35 @@ BEGIN
     RAISE EXCEPTION 'Card % not playable', p_card;
   END IF;
 
+  -- ✅ Move the played card to discard pile (on top)
   UPDATE public.room_cards
   SET pile = 'discard',
       owner_id = NULL,
-      order_index = floor(random() * 1000000)::int
+      order_index = (
+        COALESCE(
+          (SELECT MAX(order_index)
+           FROM public.room_cards
+           WHERE room_id = p_room AND pile = 'discard'),
+          0
+        ) + 1
+      )
   WHERE room_id = p_room
     AND card_id = p_card
     AND owner_id = v_uid;
 
+  -- ✅ Advance to the next player and update current card
   next_player := public.fn_next_player(p_room, v_uid);
 
   UPDATE public.rooms
   SET turn_player_id = next_player,
       current_card = p_card
   WHERE id = p_room;
+
+  RAISE NOTICE 'Player % played card %, now top of discard pile.', v_uid, p_card;
 END;
 $$;
 ALTER FUNCTION public.fn_play_card(uuid, uuid) OWNER TO postgres;
+
 
 
 -- ===============================================================
@@ -288,41 +300,76 @@ AS $$
 DECLARE
   p RECORD;
   player_count int;
+  first_card_id uuid;
+  first_card_value text;
+  is_wild boolean := true;
 BEGIN
   RAISE NOTICE '>>> fn_start_game() BEGIN: room_id=% cards_per=%', p_room, p_cards_per;
 
   -- Build a fresh deck
-  RAISE NOTICE '>>> Building deck...';
   PERFORM public.fn_build_deck(p_room);
-  RAISE NOTICE '>>> Deck built.';
 
   -- Count players
   SELECT COUNT(*) INTO player_count
   FROM public.room_players
   WHERE room_id = p_room AND is_spectator = false;
 
-  RAISE NOTICE '>>> Player count = %', player_count;
-
   IF player_count < 2 THEN
     RAISE EXCEPTION 'Not enough players (%). Need at least 2.', player_count;
   END IF;
 
   -- Deal cards to each non-spectator player
-  RAISE NOTICE '>>> Starting to deal cards...';
   FOR p IN
     SELECT player_id
     FROM public.room_players
     WHERE room_id = p_room AND is_spectator = false
   LOOP
-    RAISE NOTICE '>>> Dealing to player_id=%', p.player_id;
     PERFORM public.fn_draw(p_room, p_cards_per, p.player_id);
   END LOOP;
 
-  RAISE NOTICE '>>> Finished dealing cards.';
+  -- Pick the first discard card
+  -- Keep drawing until we get a non-wild card (optional)
+  LOOP
+    SELECT rc.card_id
+    INTO first_card_id
+    FROM public.room_cards rc
+    JOIN public.cards c ON rc.card_id = c.id
+    WHERE rc.room_id = p_room
+      AND rc.pile = 'deck'
+    ORDER BY rc.order_index ASC
+    LIMIT 1;
 
-  -- Mark game as started and set first turn
+    IF first_card_id IS NULL THEN
+      RAISE EXCEPTION 'No cards left in deck for first discard!';
+    END IF;
+
+    -- (optional rule) skip wilds as the first discard
+    SELECT (c.light_value ILIKE 'wild%' OR c.dark_value ILIKE 'wild%')
+    INTO is_wild
+    FROM public.cards c
+    WHERE c.id = first_card_id;
+
+    EXIT WHEN NOT is_wild;
+
+    -- If wild, move it to bottom of deck and continue
+    UPDATE public.room_cards
+    SET order_index = (SELECT MAX(order_index) + 1 FROM public.room_cards WHERE room_id = p_room AND pile = 'deck')
+    WHERE room_id = p_room AND card_id = first_card_id;
+  END LOOP;
+
+  -- Move first card from deck → discard
+  UPDATE public.room_cards
+  SET pile = 'discard',
+      owner_id = NULL,
+      order_index = floor(random() * 1000000)::int
+  WHERE room_id = p_room
+    AND card_id = first_card_id;
+
+  -- Set it as the room’s current card
   UPDATE public.rooms
   SET started_game = true,
+      current_card = first_card_id,
+      current_side = 'light',
       turn_player_id = (
         SELECT player_id
         FROM public.room_players
@@ -332,10 +379,10 @@ BEGIN
       )
   WHERE id = p_room;
 
-  RAISE NOTICE '>>> Game marked as started.';
-  RAISE NOTICE '>>> fn_start_game() COMPLETE.';
+  RAISE NOTICE '>>> Game started. First discard card: %', first_card_id;
 END;
 $$;
 ALTER FUNCTION public.fn_start_game(uuid, int) OWNER TO postgres;
+
 
 

@@ -19,6 +19,9 @@ export default function Game() {
   const [starting, setStarting] = useState(false);
   const [started, setStarted] = useState(false);
   const [tableCards, setTableCards] = useState<PlayerCard[]>([]);
+  const [currentCard, setCurrentCard] = useState<PlayerCard | null>(null);
+  const [isDarkSide, setIsDarkSide] = useState(false);
+
 
   const navigate = useNavigate();
 
@@ -103,6 +106,7 @@ export default function Game() {
 
       console.log(data)
 
+
       // ✅ Normalize all visible_card objects to have full structure
       const formatted: PlayerCard[] = data.map((c: any) => {
         const vc = c.visible_card ?? {};
@@ -137,6 +141,58 @@ export default function Game() {
 
     fetchTableCards();
   }, [started, session, roomId]);
+
+  useEffect(() => {
+    if (!roomId || !started) return; // skip until ready
+
+    const fetchCurrentCard = async () => {
+      try {
+        const { data: discardData, error: discardErr } = await supabase
+          .rpc("fn_top_discard", { p_room: roomId });
+        if (discardErr) {
+          console.error("Error fetching top discard:", discardErr);
+          return;
+        }
+
+        const topCardId = discardData;
+        if (!topCardId) return;
+
+        const { data: cardData } = await supabase
+          .from("cards")
+          .select("*")
+          .eq("id", topCardId)
+          .maybeSingle();
+
+        if (!cardData) return;
+
+        console.log(cardData)
+
+        setCurrentCard({
+          room_card_id: topCardId,
+          owner_id: "",
+          nickname: "",
+          visible_card: {
+            light: {
+              color: cardData.light_color ?? "black",
+              value: cardData.light_value ?? null,
+            },
+            dark: {
+              color: cardData.dark_color ?? "black",
+              value: cardData.dark_value ?? null,
+            },
+          },
+        });
+      } catch (err) {
+        console.error("Unexpected error fetching current card:", err);
+      }
+    };
+
+    fetchCurrentCard();
+    const interval = setInterval(fetchCurrentCard, 4000);
+    return () => clearInterval(interval);
+  }, [roomId, started]);
+
+
 
   // ✅ Host starts game
   const handleStartGame = async () => {
@@ -211,9 +267,12 @@ export default function Game() {
       <GameTable
         cards={tableCards}
         currentUserId={session.user.id}
-        discardPile={{ color: "red", value: "3" }}
+        currentCard={currentCard} // ✅ pass full current card
+        isDarkSide={isDarkSide}
+        onCardPlay={(index) => console.log("Played card index:", index)}
         onDrawCard={() => toast.info("Draw card pressed")}
       />
     </div>
   );
+
 }

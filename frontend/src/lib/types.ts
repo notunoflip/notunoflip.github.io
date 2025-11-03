@@ -52,8 +52,8 @@ export interface VisibleCard {
 // ✅ Player's card data
 export interface PlayerCard {
   room_card_id: string;
-  owner_id: string;
-  nickname: string;
+  owner_id: string | null;
+  nickname: string | null;
   visible_card: VisibleCard;
 }
 

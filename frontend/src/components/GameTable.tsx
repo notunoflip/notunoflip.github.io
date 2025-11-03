@@ -6,7 +6,8 @@ import { useState } from "react";
 interface GameTableProps {
   cards: PlayerCard[];
   currentUserId: string;
-  discardPile?: { color: CardColor; value: CardValue };
+  currentCard?: PlayerCard | null;
+  discardPile?: { color: CardColor; value: CardValue } | null;
   isDarkSide?: boolean;
   onCardPlay?: (index: number) => void;
   onDrawCard?: () => void;
@@ -15,6 +16,7 @@ interface GameTableProps {
 export const GameTable = ({
   cards,
   currentUserId,
+  currentCard,
   discardPile,
   isDarkSide = false,
   onCardPlay,
@@ -22,7 +24,7 @@ export const GameTable = ({
 }: GameTableProps) => {
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
 
-  if (!cards || cards.length === 0) {
+  if (!cards?.length) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400">
         Waiting for cards...
@@ -30,7 +32,7 @@ export const GameTable = ({
     );
   }
 
-  // Group cards by owner
+  // ✅ Group cards by owner
   const grouped = cards.reduce<Record<string, PlayerCard[]>>((acc, card) => {
     if (!acc[card.owner_id]) acc[card.owner_id] = [];
     acc[card.owner_id].push(card);
@@ -56,37 +58,42 @@ export const GameTable = ({
     const x = radius * Math.cos(rad);
     const y = radius * Math.sin(rad);
 
-    return {
-      transform: `translate(${x}px, ${y}px)`,
-      rotation: angle + 90,
-    };
+    return { transform: `translate(${x}px, ${y}px)` };
   };
 
-  // Helper for fanned layout
   const getFanStyle = (index: number, total: number, spread = 60) => {
     const startAngle = -spread / 2;
     const step = total > 1 ? spread / (total - 1) : 0;
     const rotation = startAngle + index * step;
-    const offsetX = index * 30 - ((total - 1) * 30) / 2; // slight horizontal offset
+    const offsetX = index * 30 - ((total - 1) * 30) / 2;
     return { rotation, offsetX };
   };
 
+  // ✅ Pick which card shows on the discard pile
+  const activeDiscard = currentCard?.visible_card ?? 
+    (discardPile
+      ? {
+          light: { color: discardPile.color ?? "black", value: discardPile.value ?? null },
+          dark: { color: discardPile.color ?? "black", value: discardPile.value ?? null },
+        }
+      : null);
+
   return (
-    <div className=" relative w-full h-[80vh] flex items-center justify-center">
+    <div className="relative w-full h-[80vh] flex items-center justify-center">
       {/* Center piles */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-4">
-        {/* Discard pile */}
-        {discardPile && (
+        {/* ✅ Discard pile */}
+        {activeDiscard && (
           <Card
-            lightColor={discardPile.color}
-            lightValue={discardPile.value}
-            darkColor={discardPile.color}
-            darkValue={discardPile.value}
-            isDarkSide={isDarkSide}
+            lightColor={activeDiscard.light.color ?? "black"}
+            lightValue={activeDiscard.light.value ?? null}
+            darkColor={activeDiscard.dark.color ?? "black"}
+            darkValue={activeDiscard.dark.value ?? null}
+            isDarkSide={!isDarkSide}
           />
         )}
 
-        {/* Draw pile */}
+        {/* ✅ Draw pile */}
         <button onClick={onDrawCard}>
           <Card
             lightColor="blue"
@@ -98,7 +105,7 @@ export const GameTable = ({
         </button>
       </div>
 
-      {/* Players */}
+      {/* ✅ Player hands */}
       {players.map((player, i) => {
         const isCurrent = player.id === currentUserId;
         const pos = getPlayerPosition(i);
@@ -115,19 +122,11 @@ export const GameTable = ({
 
             <div className="relative h-32 w-full flex justify-center mt-2">
               {player.cards.map((card, index) => {
-                let light: { color: CardColor | null; value: CardValue | null } = {
-                  color: null,
-                  value: null,
-                };
-                let dark: { color: CardColor | null; value: CardValue | null } = {
-                  color: null,
-                  value: null,
+                const { light, dark } = card.visible_card ?? {
+                  light: { color: null, value: null },
+                  dark: { color: null, value: null },
                 };
 
-                if ("light" in card.visible_card && "dark" in card.visible_card) {
-                  light = card.visible_card.light;
-                  dark = card.visible_card.dark;
-                } 
                 const { rotation, offsetX } = getFanStyle(index, player.cards.length);
 
                 return (
@@ -155,7 +154,7 @@ export const GameTable = ({
                       isFlipped={false}
                       showBothSides={isCurrent}
                       isDarkSide={isDarkSide}
-                      isHoverable={false} // disable hover
+                      isHoverable={false}
                       rotation={rotation}
                     />
                   </motion.div>

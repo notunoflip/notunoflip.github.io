@@ -103,43 +103,33 @@ SELECT
     rc.room_id,
     rc.card_id,
     rc.owner_id,
-    p.nickname,  -- Added nickname
+    p.nickname,
     rc.pile,
     rc.order_index,
     CASE
-        -- Our own cards: show full light + dark
-        WHEN rc.owner_id = auth.uid() THEN
+        -- 🟢 Player’s own hand: show both sides
+        WHEN rc.pile = 'hand' AND rc.owner_id = auth.uid() THEN
             jsonb_build_object(
                 'light', jsonb_build_object('color', c.light_color, 'value', c.light_value),
                 'dark',  jsonb_build_object('color', c.dark_color,  'value', c.dark_value)
             )
 
-        -- Discard pile: show only top card
-        WHEN rc.pile = 'discard' AND rc.order_index = (
-            SELECT MAX(order_index) 
-            FROM public.room_cards 
-            WHERE room_id = rc.room_id AND pile = 'discard'
-        ) THEN
-            jsonb_build_object(
-                'side', rooms.current_side,
-                'color', CASE WHEN rooms.current_side = 'light' THEN c.dark_color ELSE c.light_color END,
-                'value', CASE WHEN rooms.current_side = 'light' THEN c.dark_value ELSE c.light_value END
-            )
-
-        -- Other players' cards: show only the visible side
-        ELSE
+        -- 🟣 Other players’ hand cards: hidden
+        WHEN rc.pile = 'hand' THEN
             jsonb_build_object(
                 'side', CASE WHEN rooms.current_side = 'light' THEN 'dark' ELSE 'light' END,
                 'color', CASE WHEN rooms.current_side = 'light' THEN c.dark_color ELSE c.light_color END,
                 'value', CASE WHEN rooms.current_side = 'light' THEN c.dark_value ELSE c.light_value END
             )
+
+        ELSE NULL
     END AS visible_card
 FROM public.room_cards rc
 JOIN public.cards c ON c.id = rc.card_id
 JOIN public.rooms rooms ON rooms.id = rc.room_id
-JOIN public.players p ON p.id = rc.owner_id  -- Join to get nickname
-WHERE rc.pile = 'hand' OR rc.pile = 'discard';
-
+LEFT JOIN public.players p ON p.id = rc.owner_id
+WHERE rc.pile IN ('hand')
+ORDER BY rc.pile, rc.order_index ASC;
 
 
 
