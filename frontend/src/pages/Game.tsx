@@ -1,12 +1,19 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useOutletContext, useParams } from "react-router-dom";
-import { supabase } from "../lib/supabaseClient";
+import { useOutletContext, useParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "../lib/supabaseClient";
+
 import { GameTable } from "../components/GameTable";
 import GameWaiting from "../components/GameWaiting";
+
 import type { Session } from "@supabase/supabase-js";
 import type { PlayerCard } from "../lib/types";
+
+import { useRoomStatus } from "../hooks/useRoomStatus";
+import { useGameTurn } from "../hooks/useGameTurn";
+import { useTableCards } from "../hooks/useTableCards";
+import { useCurrentCard } from "../hooks/useCurrentCard";
+import { usePreviewCard } from "../hooks/usePreviewCard";
 
 const LOCAL_EDGE_URL = import.meta.env.VITE_EDGE_URL;
 
@@ -14,192 +21,18 @@ export default function Game() {
   const { session } = useOutletContext<{ session: Session | null }>();
   const { roomId } = useParams<{ roomId: string }>();
 
-  const [isHost, setIsHost] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [starting, setStarting] = useState(false);
-  const [started, setStarted] = useState(false);
-  const [tableCards, setTableCards] = useState<PlayerCard[]>([]);
-  const [currentCard, setCurrentCard] = useState<PlayerCard | null>(null);
-  const [isDarkSide, setIsDarkSide] = useState(false);
-
-
-  const navigate = useNavigate();
-
-  // ✅ Check if player is host and if game started
-  useEffect(() => {
-    const checkRoomStatus = async () => {
-      if (!session || !roomId) return;
-      setLoading(true);
-
-      const { data, error } = await supabase
-        .from("room_players")
-        .select("is_host, rooms(started_game)")
-        .eq("room_id", roomId)
-        .eq("player_id", session.user.id)
-        .maybeSingle();
-
-      if (error) {
-        console.error("Error checking room:", error);
-        toast.error("Failed to fetch room status");
-      } else if (!data) {
-        toast.error("Room not found");
-        navigate("/");
-        return;
-      } else {
-        setIsHost(!!data.is_host);
-        // @ts-ignore
-        setStarted(!!data.rooms?.started_game);
-      }
-
-      setLoading(false);
-    };
-
-    checkRoomStatus();
-  }, [session, roomId, navigate]);
-
-  // ✅ Listen for game start in realtime
-  useEffect(() => {
-    if (!roomId) return;
-
-    const channel = supabase
-      .channel(`room-${roomId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "rooms",
-          filter: `id=eq.${roomId}`,
-        },
-        (payload) => {
-          if (payload.new.started_game && !started) {
-            toast.success("Game started!");
-            setStarted(true);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
-  }, [roomId, started]);
-
-  // ✅ Fetch all table cards (your hand + others’ visible cards)
-  useEffect(() => {
-    const fetchTableCards = async () => {
-      if (!session || !started || !roomId) return;
-
-      const { data, error } = await supabase
-        .from("secure_room_cards")
-        .select("room_card_id, owner_id, nickname, visible_card")
-        .eq("room_id", roomId);
-
-      if (error) {
-        console.error("Error fetching table cards:", error);
-        toast.error("Could not fetch table cards");
-        return;
-      }
-
-      if (!data?.length) {
-        console.warn("No cards found for this room");
-        return;
-      }
-
-      console.log(data)
-
-
-      // ✅ Normalize all visible_card objects to have full structure
-      const formatted: PlayerCard[] = data.map((c: any) => {
-        const vc = c.visible_card ?? {};
-        const def = { color: "black", value: null };
-
-        let light = def;
-        let dark = def;
-
-        // Case 1: both sides provided
-        if (vc.light || vc.dark) {
-          light = { color: vc.light?.color ?? "black", value: vc.light?.value ?? null };
-          dark = { color: vc.dark?.color ?? "black", value: vc.dark?.value ?? null };
-        }
-
-        // Case 2: single side provided
-        else if (vc.side === "light" || vc.side === "dark") {
-          const sideData = { color: vc.color ?? "black", value: vc.value ?? null };
-          if (vc.side === "light") light = sideData;
-          else dark = sideData;
-        }
-
-        // Return normalized structure
-        return { ...c, visible_card: { light, dark } };
-      });
-
-
-      console.log(formatted)
-
-
-      setTableCards(formatted);
-    };
-
-    fetchTableCards();
-  }, [started, session, roomId]);
-
-  useEffect(() => {
-    if (!roomId || !started) return; // skip until ready
-
-    const fetchCurrentCard = async () => {
-      try {
-        const { data: discardData, error: discardErr } = await supabase
-          .rpc("fn_top_discard", { p_room: roomId });
-        if (discardErr) {
-          console.error("Error fetching top discard:", discardErr);
-          return;
-        }
-
-        const topCardId = discardData;
-        if (!topCardId) return;
-
-        const { data: cardData } = await supabase
-          .from("cards")
-          .select("*")
-          .eq("id", topCardId)
-          .maybeSingle();
-
-        if (!cardData) return;
-
-        console.log(cardData)
-
-        setCurrentCard({
-          room_card_id: topCardId,
-          owner_id: "",
-          nickname: "",
-          visible_card: {
-            light: {
-              color: cardData.light_color ?? "black",
-              value: cardData.light_value ?? null,
-            },
-            dark: {
-              color: cardData.dark_color ?? "black",
-              value: cardData.dark_value ?? null,
-            },
-          },
-        });
-      } catch (err) {
-        console.error("Unexpected error fetching current card:", err);
-      }
-    };
-
-    fetchCurrentCard();
-    const interval = setInterval(fetchCurrentCard, 4000);
-    return () => clearInterval(interval);
-  }, [roomId, started]);
-
-
+  const { loading, isHost, started, setStarted } = useRoomStatus(session, roomId);
+  const { activePlayerId } = useGameTurn(roomId);
+  const { tableCards } = useTableCards(session, roomId, started);
+  const { currentCard } = useCurrentCard(roomId, started);
+  const { previewCard } = usePreviewCard(roomId, started);
 
   // ✅ Host starts game
   const handleStartGame = async () => {
     if (!session || !roomId) return;
-    setStarting(true);
+
     try {
-      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+      const { data: sessionData, error: sessionErr } = await fetchSession();
       if (sessionErr || !sessionData?.session) throw new Error("No active session");
 
       toast.info("Starting game...");
@@ -217,8 +50,48 @@ export default function Game() {
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Failed to start game");
-    } finally {
-      setStarting(false);
+    }
+  };
+
+  // ✅ Play a card
+  const handlePlayCard = async (roomCard: PlayerCard) => {
+    if (!session || !roomId) return;
+    if (activePlayerId !== session.user.id) return toast.error("Not your turn!");
+
+    try {
+      console.log(roomId)
+      console.log(roomCard.room_card_id)
+      const { error } = await supabase.rpc("fn_play_card", {
+        p_room: roomId,
+        p_card: roomCard.room_card_id,
+      });
+
+      if (error) throw error;
+      toast.success("Card played!");
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Failed to play card");
+    }
+  };
+
+  // ✅ Draw a card
+  const handleDrawCard = async () => {
+    if (!session || !roomId) return;
+    if (activePlayerId !== session.user.id) return toast.error("Not your turn!");
+
+    try {
+      const { error } = await supabase.rpc("fn_draw", {
+        p_room: roomId,
+        p_n: 1,
+        p_player: session.user.id,
+      });
+      if (error) throw error;
+
+      toast.success("Card drawn!");
+      await supabase.rpc("fn_advance_turn", { p_room: roomId });
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Failed to draw card");
     }
   };
 
@@ -241,19 +114,9 @@ export default function Game() {
             <div className="pt-4 text-center">
               <button
                 onClick={handleStartGame}
-                disabled={starting}
-                className={`px-5 py-2 rounded-xl shadow-md transition ${starting
-                  ? "bg-gray-500 cursor-not-allowed"
-                  : "bg-green-600 hover:bg-green-700 text-white"
-                  }`}
+                className="px-5 py-2 rounded-xl shadow-md bg-green-600 hover:bg-green-700 text-white"
               >
-                {starting ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="animate-spin w-4 h-4" /> Starting...
-                  </span>
-                ) : (
-                  "Start Game"
-                )}
+                Start Game
               </button>
             </div>
           )}
@@ -267,12 +130,21 @@ export default function Game() {
       <GameTable
         cards={tableCards}
         currentUserId={session.user.id}
-        currentCard={currentCard} // ✅ pass full current card
-        isDarkSide={isDarkSide}
-        onCardPlay={(index) => console.log("Played card index:", index)}
-        onDrawCard={() => toast.info("Draw card pressed")}
+        drawCardTop={previewCard}
+        currentCard={currentCard}
+        activePlayerId={activePlayerId ?? undefined}
+        onCardPlay={(index) => handlePlayCard(tableCards[index])}
+        onDrawCard={handleDrawCard}
       />
     </div>
   );
+}
 
+// Small helper for fetching session
+async function fetchSession() {
+  try {
+    return await supabase.auth.getSession();
+  } catch (err) {
+    return { data: null, error: err };
+  }
 }

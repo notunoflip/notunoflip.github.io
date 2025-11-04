@@ -1,13 +1,14 @@
 import { motion } from "framer-motion";
-import type { PlayerCard, CardColor, CardValue } from "../lib/types";
+import type { PlayerCard, VisibleCard } from "../lib/types";
 import { Card } from "./Card";
 import { useState } from "react";
 
 interface GameTableProps {
   cards: PlayerCard[];
   currentUserId: string;
-  currentCard?: PlayerCard | null;
-  discardPile?: { color: CardColor; value: CardValue } | null;
+  currentCard?: VisibleCard | null;     // ✅ now only visibleCard
+  drawCardTop?: VisibleCard | null;     // ✅ same here
+  activePlayerId?: string;
   isDarkSide?: boolean;
   onCardPlay?: (index: number) => void;
   onDrawCard?: () => void;
@@ -17,7 +18,8 @@ export const GameTable = ({
   cards,
   currentUserId,
   currentCard,
-  discardPile,
+  drawCardTop,
+  activePlayerId,
   isDarkSide = false,
   onCardPlay,
   onDrawCard,
@@ -54,10 +56,8 @@ export const GameTable = ({
     const angle = relativeIndex * angleStep + 90; // bottom = current player
     const radius = 250;
     const rad = (angle * Math.PI) / 180;
-
     const x = radius * Math.cos(rad);
     const y = radius * Math.sin(rad);
-
     return { transform: `translate(${x}px, ${y}px)` };
   };
 
@@ -69,37 +69,35 @@ export const GameTable = ({
     return { rotation, offsetX };
   };
 
-  // ✅ Pick which card shows on the discard pile
-  const activeDiscard = currentCard?.visible_card ?? 
-    (discardPile
-      ? {
-          light: { color: discardPile.color ?? "black", value: discardPile.value ?? null },
-          dark: { color: discardPile.color ?? "black", value: discardPile.value ?? null },
-        }
-      : null);
+  const isYourTurn = activePlayerId === currentUserId;
 
   return (
     <div className="relative w-full h-[80vh] flex items-center justify-center">
       {/* Center piles */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-4">
-        {/* ✅ Discard pile */}
-        {activeDiscard && (
+        {/* ✅ Current top card (discard) */}
+        {currentCard && (
           <Card
-            lightColor={activeDiscard.light.color ?? "black"}
-            lightValue={activeDiscard.light.value ?? null}
-            darkColor={activeDiscard.dark.color ?? "black"}
-            darkValue={activeDiscard.dark.value ?? null}
+            lightColor={currentCard.light.color ?? "black"}
+            lightValue={currentCard.light.value ?? null}
+            darkColor={currentCard.dark.color ?? "black"}
+            darkValue={currentCard.dark.value ?? null}
             isDarkSide={!isDarkSide}
           />
         )}
 
-        {/* ✅ Draw pile */}
-        <button onClick={onDrawCard}>
+        {/* ✅ Draw pile — disabled when not your turn */}
+        <button
+          onClick={() => isYourTurn && onDrawCard?.()}
+          disabled={!isYourTurn}
+          className={`transition-transform ${isYourTurn ? "hover:scale-105" : "opacity-40 cursor-not-allowed"
+            }`}
+        >
           <Card
-            lightColor="blue"
-            lightValue="4"
-            darkColor="red"
-            darkValue="4"
+            lightColor={drawCardTop?.light.color ?? "blue"}
+            lightValue={drawCardTop?.light.value ?? "7"}
+            darkColor={drawCardTop?.dark.color ?? "red"}
+            darkValue={drawCardTop?.dark.value ?? "7"}
             isDarkSide={isDarkSide}
           />
         </button>
@@ -116,7 +114,12 @@ export const GameTable = ({
             className="absolute flex flex-col items-center gap-2"
             style={{ transform: pos.transform }}
           >
-            <div className="text-white/90 text-sm font-semibold bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
+            <div
+              className={`text-sm font-semibold px-3 py-1 rounded-full backdrop-blur-sm ${player.id === activePlayerId
+                ? "bg-green-600 text-white"  // ✅ current turn highlight
+                : "bg-black/40 text-white/90"
+                }`}
+            >
               {isCurrent ? "You" : player.nickname}
             </div>
 
@@ -126,7 +129,6 @@ export const GameTable = ({
                   light: { color: null, value: null },
                   dark: { color: null, value: null },
                 };
-
                 const { rotation, offsetX } = getFanStyle(index, player.cards.length);
 
                 return (
@@ -140,9 +142,15 @@ export const GameTable = ({
                         : { scale: 1, y: 0, zIndex: 1 }
                     }
                     onClick={() => {
-                      if (isCurrent) {
+                      if (isCurrent && isYourTurn) {
                         setSelectedCard(index);
                         onCardPlay?.(index);
+                      }
+                    }}
+                    onDoubleClick={() => {
+                      if (isCurrent && isYourTurn) {
+                        onCardPlay?.(index);
+                        setSelectedCard(null);
                       }
                     }}
                   >

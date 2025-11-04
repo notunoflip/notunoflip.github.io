@@ -41,11 +41,11 @@ export type CardValue =
 export interface VisibleCard {
   dark: {
     color: CardColor;
-    value: CardValue;
+    value: CardValue | null;
   };
   light: {
     color: CardColor;
-    value: CardValue;
+    value: CardValue | null;
   };
 }
 

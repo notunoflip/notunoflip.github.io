@@ -222,11 +222,45 @@ $$;
 ALTER FUNCTION public.fn_draw(uuid, int, uuid) OWNER TO postgres;
 
 
+-- ===============================================================
+-- Preview draw cards (see opposite side of the next cards)
+-- ===============================================================
+CREATE OR REPLACE FUNCTION public.fn_preview_draw(p_room uuid)
+RETURNS TABLE (
+  room_card_id uuid,
+  card_id uuid,
+  visible_side text,
+  color text,
+  value text
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    rc.id AS room_card_id,
+    c.id AS card_id,
+    CASE r.current_side WHEN 'light' THEN 'dark' ELSE 'light' END AS visible_side,
+    CASE r.current_side WHEN 'light' THEN c.dark_color ELSE c.light_color END AS color,
+    CASE r.current_side WHEN 'light' THEN c.dark_value ELSE c.light_value END AS value
+  FROM public.rooms r
+  JOIN public.room_cards rc ON rc.room_id = r.id
+  JOIN public.cards c ON c.id = rc.card_id
+  WHERE r.id = p_room
+    AND rc.pile = 'deck'
+  ORDER BY rc.order_index ASC
+  LIMIT 1;
+$$;
+
+ALTER FUNCTION public.fn_preview_draw(uuid) OWNER TO postgres;
+
+
+
 
 -- ===============================================================
 -- Play card (authenticated player)
 -- ===============================================================
-CREATE OR REPLACE FUNCTION public.fn_play_card(p_room uuid, p_card uuid)
+CREATE OR REPLACE FUNCTION public.fn_play_card(p_room uuid, p_room_card uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -234,57 +268,81 @@ SET search_path = public
 AS $$
 DECLARE
   v_uid uuid := (SELECT auth.uid());
-  next_player uuid;
+  v_card_id uuid;
+  v_current_side text;
+  v_color text;
+  v_value text;
+  v_next_player uuid;
 BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'Not authenticated';
   END IF;
 
+  -- ✅ Verify player is in the room and not a spectator
   IF NOT EXISTS (
     SELECT 1 FROM public.room_players
-    WHERE player_id = v_uid AND room_id = p_room AND is_spectator = false
+    WHERE room_id = p_room AND player_id = v_uid AND is_spectator = false
   ) THEN
     RAISE EXCEPTION 'You are not a player in this room';
   END IF;
 
+  -- ✅ Check game started
   IF NOT EXISTS (
     SELECT 1 FROM public.rooms WHERE id = p_room AND started_game = true
   ) THEN
     RAISE EXCEPTION 'Game not started';
   END IF;
 
-  IF NOT public.fn_is_playable(p_room, p_card) THEN
-    RAISE EXCEPTION 'Card % not playable', p_card;
+  -- ✅ Fetch the card’s card_id and side info
+  SELECT rc.card_id INTO v_card_id FROM public.room_cards rc
+  WHERE rc.id = p_room_card AND rc.room_id = p_room AND rc.owner_id = v_uid AND rc.pile = 'hand';
+
+  IF v_card_id IS NULL THEN
+    RAISE EXCEPTION 'You do not own this card or it’s not playable';
   END IF;
 
-  -- ✅ Move the played card to discard pile (on top)
+  -- ✅ Get current side of the room
+  SELECT current_side INTO v_current_side FROM public.rooms WHERE id = p_room;
+
+  -- ✅ Fetch the color/value for the current side
+  SELECT
+    CASE WHEN v_current_side = 'light' THEN c.light_color ELSE c.dark_color END,
+    CASE WHEN v_current_side = 'light' THEN c.light_value ELSE c.dark_value END
+  INTO v_color, v_value
+  FROM public.cards c WHERE c.id = v_card_id;
+
+  -- ✅ Validate play legality
+  IF NOT public.fn_is_playable(p_room, v_card_id) THEN
+    RAISE EXCEPTION 'Card not playable: % %', v_color, v_value;
+  END IF;
+
+  -- ✅ Move card to discard
   UPDATE public.room_cards
   SET pile = 'discard',
       owner_id = NULL,
-      order_index = (
-        COALESCE(
-          (SELECT MAX(order_index)
-           FROM public.room_cards
-           WHERE room_id = p_room AND pile = 'discard'),
-          0
-        ) + 1
-      )
-  WHERE room_id = p_room
-    AND card_id = p_card
-    AND owner_id = v_uid;
+      order_index = COALESCE(
+        (SELECT MAX(order_index) FROM public.room_cards WHERE room_id = p_room AND pile = 'discard'),
+        0
+      ) + 1
+  WHERE id = p_room_card;
 
-  -- ✅ Advance to the next player and update current card
-  next_player := public.fn_next_player(p_room, v_uid);
-
+  -- ✅ Update current card
   UPDATE public.rooms
-  SET turn_player_id = next_player,
-      current_card = p_card
+  SET current_card = v_card_id
   WHERE id = p_room;
 
-  RAISE NOTICE 'Player % played card %, now top of discard pile.', v_uid, p_card;
+  -- ✅ Handle special cards (delegated)
+  PERFORM public.fn_handle_special_card(p_room, v_uid, v_color, v_value, v_current_side);
+
+  -- ✅ Advance to next player (if not modified by special card)
+  v_next_player := public.fn_next_player(p_room, v_uid);
+  UPDATE public.rooms SET turn_player_id = v_next_player WHERE id = p_room;
+
+  RAISE NOTICE 'Player % played % % on % side', v_uid, v_color, v_value, v_current_side;
 END;
 $$;
 ALTER FUNCTION public.fn_play_card(uuid, uuid) OWNER TO postgres;
+
 
 
 
