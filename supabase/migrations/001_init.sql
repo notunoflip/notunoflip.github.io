@@ -44,7 +44,9 @@ CREATE TABLE public.rooms (
   direction text DEFAULT 'clockwise' CHECK (direction IN ('clockwise','counterclockwise')),
   draw_stack int DEFAULT 0,
   started_game boolean DEFAULT false,
+  skip_next boolean DEFAULT false,
   private_game boolean DEFAULT false,
+  wild_color text, 
   created_at timestamptz DEFAULT now(),
   last_turn_started_at timestamptz DEFAULT now(),
   turn_duration int DEFAULT 30
@@ -136,3 +138,4 @@ ORDER BY rc.pile, rc.order_index ASC;
 -- Enable realtime replication for your tables
 ALTER PUBLICATION supabase_realtime ADD TABLE public.rooms;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.room_players;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.room_cards

@@ -14,6 +14,10 @@ import { useGameTurn } from "../hooks/useGameTurn";
 import { useTableCards } from "../hooks/useTableCards";
 import { useCurrentCard } from "../hooks/useCurrentCard";
 import { usePreviewCard } from "../hooks/usePreviewCard";
+import { useCurrentSide } from "../hooks/useCurrentSide";
+
+
+import { useState } from "react";
 
 const LOCAL_EDGE_URL = import.meta.env.VITE_EDGE_URL;
 
@@ -21,11 +25,16 @@ export default function Game() {
   const { session } = useOutletContext<{ session: Session | null }>();
   const { roomId } = useParams<{ roomId: string }>();
 
-  const { loading, isHost, started, setStarted } = useRoomStatus(session, roomId);
+  const { loading, isHost, started } = useRoomStatus(session, roomId);
   const { activePlayerId } = useGameTurn(roomId);
   const { tableCards } = useTableCards(session, roomId, started);
   const { currentCard } = useCurrentCard(roomId, started);
   const { previewCard } = usePreviewCard(roomId, started);
+  const { currentSide } = useCurrentSide(roomId);
+
+  const [showWildModal, setShowWildModal] = useState(false);
+  const [pendingWildCard, setPendingWildCard] = useState<PlayerCard | null>(null);
+
 
   // ✅ Host starts game
   const handleStartGame = async () => {
@@ -58,12 +67,26 @@ export default function Game() {
     if (!session || !roomId) return;
     if (activePlayerId !== session.user.id) return toast.error("Not your turn!");
 
+    // TODO we need to change the color if wild
+    // Determine which side is active
+    // const activeSide = currentCard?.side ?? "light";
+    // const { color, value } = roomCard.visible_card[activeSide];
+
+    // Detect wild
+    // const isWild = value?.startsWith("wild");
+
+    // if (isWild) {
+    //   setPendingWildCard(roomCard);
+    //   setShowWildModal(true);
+    //   return;
+    // }
+
+
     try {
-      console.log(roomId)
-      console.log(roomCard.room_card_id)
       const { error } = await supabase.rpc("fn_play_card", {
         p_room: roomId,
-        p_card: roomCard.room_card_id,
+        p_room_card: roomCard.room_card_id,
+        p_chosen_color: null,
       });
 
       if (error) throw error;
@@ -80,15 +103,12 @@ export default function Game() {
     if (activePlayerId !== session.user.id) return toast.error("Not your turn!");
 
     try {
-      const { error } = await supabase.rpc("fn_draw", {
+      const { error } = await supabase.rpc("fn_draw_card", {
         p_room: roomId,
-        p_n: 1,
-        p_player: session.user.id,
       });
       if (error) throw error;
 
       toast.success("Card drawn!");
-      await supabase.rpc("fn_advance_turn", { p_room: roomId });
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Failed to draw card");
@@ -133,7 +153,8 @@ export default function Game() {
         drawCardTop={previewCard}
         currentCard={currentCard}
         activePlayerId={activePlayerId ?? undefined}
-        onCardPlay={(index) => handlePlayCard(tableCards[index])}
+        isDarkSide={currentSide === "dark"}
+        onCardPlay={(card) => handlePlayCard(card)}
         onDrawCard={handleDrawCard}
       />
     </div>

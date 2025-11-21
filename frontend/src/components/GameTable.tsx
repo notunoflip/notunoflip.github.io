@@ -6,11 +6,14 @@ import { useState } from "react";
 interface GameTableProps {
   cards: PlayerCard[];
   currentUserId: string;
-  currentCard?: VisibleCard | null;     // ✅ now only visibleCard
-  drawCardTop?: VisibleCard | null;     // ✅ same here
+  currentCard?: VisibleCard | null;
+  drawCardTop?: VisibleCard | null;
   activePlayerId?: string;
   isDarkSide?: boolean;
-  onCardPlay?: (index: number) => void;
+
+  // ✅ UPDATED: now passes the full card object
+  onCardPlay?: (card: PlayerCard) => void;
+
   onDrawCard?: () => void;
 }
 
@@ -34,10 +37,12 @@ export const GameTable = ({
     );
   }
 
-  // ✅ Group cards by owner
+  // Group cards by owner
   const grouped = cards.reduce<Record<string, PlayerCard[]>>((acc, card) => {
-    if (!acc[card.owner_id]) acc[card.owner_id] = [];
-    acc[card.owner_id].push(card);
+    const safeOwnerId = card.owner_id ?? "unknown";
+    if (!acc[safeOwnerId]) acc[safeOwnerId] = [];
+    acc[safeOwnerId].push(card);
+
     return acc;
   }, {});
 
@@ -53,7 +58,7 @@ export const GameTable = ({
 
   const getPlayerPosition = (index: number) => {
     const relativeIndex = (index - currentIndex + numPlayers) % numPlayers;
-    const angle = relativeIndex * angleStep + 90; // bottom = current player
+    const angle = relativeIndex * angleStep + 90;
     const radius = 250;
     const rad = (angle * Math.PI) / 180;
     const x = radius * Math.cos(rad);
@@ -75,7 +80,6 @@ export const GameTable = ({
     <div className="relative w-full h-[80vh] flex items-center justify-center">
       {/* Center piles */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-4">
-        {/* ✅ Current top card (discard) */}
         {currentCard && (
           <Card
             lightColor={currentCard.light.color ?? "black"}
@@ -86,7 +90,7 @@ export const GameTable = ({
           />
         )}
 
-        {/* ✅ Draw pile — disabled when not your turn */}
+        {/* Draw pile */}
         <button
           onClick={() => isYourTurn && onDrawCard?.()}
           disabled={!isYourTurn}
@@ -103,7 +107,7 @@ export const GameTable = ({
         </button>
       </div>
 
-      {/* ✅ Player hands */}
+      {/* Player hands */}
       {players.map((player, i) => {
         const isCurrent = player.id === currentUserId;
         const pos = getPlayerPosition(i);
@@ -116,8 +120,8 @@ export const GameTable = ({
           >
             <div
               className={`text-sm font-semibold px-3 py-1 rounded-full backdrop-blur-sm ${player.id === activePlayerId
-                ? "bg-green-600 text-white"  // ✅ current turn highlight
-                : "bg-black/40 text-white/90"
+                  ? "bg-green-600 text-white"
+                  : "bg-black/40 text-white/90"
                 }`}
             >
               {isCurrent ? "You" : player.nickname}
@@ -129,7 +133,11 @@ export const GameTable = ({
                   light: { color: null, value: null },
                   dark: { color: null, value: null },
                 };
-                const { rotation, offsetX } = getFanStyle(index, player.cards.length);
+
+                const { rotation, offsetX } = getFanStyle(
+                  index,
+                  player.cards.length
+                );
 
                 return (
                   <motion.div
@@ -144,12 +152,14 @@ export const GameTable = ({
                     onClick={() => {
                       if (isCurrent && isYourTurn) {
                         setSelectedCard(index);
-                        onCardPlay?.(index);
+
+                        // ✅ UPDATED: pass full card object
+                        onCardPlay?.(card);
                       }
                     }}
                     onDoubleClick={() => {
                       if (isCurrent && isYourTurn) {
-                        onCardPlay?.(index);
+                        onCardPlay?.(card);
                         setSelectedCard(null);
                       }
                     }}

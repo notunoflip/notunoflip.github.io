@@ -11,7 +11,6 @@ export function usePreviewCard(roomId?: string, started?: boolean) {
     const fetchPreviewCard = async () => {
       try {
         const { data, error } = await supabase.rpc("fn_preview_draw", { p_room: roomId });
-
         if (error) throw error;
         if (!data || data.length === 0) return;
 
@@ -27,17 +26,36 @@ export function usePreviewCard(roomId?: string, started?: boolean) {
             value: c.visible_side === "dark" ? c.value : null,
           },
         };
-        // console.log(vc)
-
         setPreviewCard(vc);
       } catch (err) {
         console.error("Error fetching preview card:", err);
       }
     };
 
+    // Initial fetch
     fetchPreviewCard();
-    const interval = setInterval(fetchPreviewCard, 4000);
-    return () => clearInterval(interval);
+
+    // Subscribe to room_cards changes (when cards are drawn from deck)
+    const channel = supabase
+      .channel(`room-${roomId}-preview`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "room_cards",
+          filter: `room_id=eq.${roomId}`,
+        },
+        async () => {
+          // Refetch preview when deck changes
+          await fetchPreviewCard();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [roomId, started]);
 
   return { previewCard, setPreviewCard };
