@@ -14,16 +14,24 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install deps
-        run: npm ci
-
-      - name: Build
-        run: npm run build
+      # Debug secrets (optional)
+      - name: Debug environment variables
+        run: |
+          echo "URL: $VITE_SUPABASE_URL"
+          echo "KEY length: ${#VITE_SUPABASE_ANON_KEY}"
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
-      # 404 for SPA
+      - name: Install deps
+        run: npm ci
+
+      - name: Build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
       - name: Copy index.html to 404.html
         run: cp ./dist/index.html ./dist/404.html
 
