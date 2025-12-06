@@ -1,0 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Gloria+Hallelujah&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+
+html {
+  transition: background-color 0.3s, color 0.3s;
+  font-family: 'Gloria Hallelujah', cursive;
+}
