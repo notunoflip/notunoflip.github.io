@@ -90,7 +90,7 @@ export default function GameWaiting({
             <li
               key={p.player_id}
               className={`flex items-center justify-between px-4 py-3 transition relative overflow-hidden
-                hover:bg-gray-50 dark:hover:bg-gray-800
+                hover:bg-gray-50 dark:text-gray-800 dark:hover:bg-gray-300
                 ${
                   winner === p.player_id
                     ? `before:absolute before:inset-1 before:rounded-md
@@ -100,7 +100,7 @@ export default function GameWaiting({
                 }`}
             >
               <span className="font-medium flex items-center gap-2">
-                <User className="w-6 h-6 text-gray-900 dark:text-white" />
+                <User className="w-6 h-6 text-gray-900 dark:text-gray-800" />
                 {p.players.nickname}
                 {winner === p.player_id && (
                   <Trophy className="w-4 h-4 mr-1 text-yellow-500" />

@@ -86,17 +86,44 @@ export const GameTable = ({
         <button
           onClick={() => isYourTurn && onDrawCard?.()}
           disabled={!isYourTurn}
-          className={`transition-transform ${isYourTurn ? "hover:scale-105" : "opacity-40 cursor-not-allowed"
+          className={`relative group transition-transform ${isYourTurn
+              ? "hover:scale-105"
+              : "opacity-40 cursor-not-allowed"
             }`}
         >
+
+          {/* Another layer */}
+          <div
+            className="absolute inset-0 rounded-md scale-95 bg-black/10 rotate-3"
+            style={{ zIndex: 0 }}
+          />
+
+          {/* Main top card */}
           <Card
             lightColor={drawCardTop?.light.color ?? "blue"}
             lightValue={drawCardTop?.light.value ?? "7"}
             darkColor={drawCardTop?.dark.color ?? "red"}
             darkValue={drawCardTop?.dark.value ?? "7"}
             isDarkSide={isDarkSide}
+            style={{ zIndex: 1, position: "relative" }}
           />
+
+          {/* Label */}
+          <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-gray-300">
+            Draw
+          </div>
+
+          {/* Soft pulse when it's your turn */}
+          {isYourTurn && (
+            <motion.div
+              className="absolute inset-0 rounded-md"
+              animate={{ boxShadow: ["0 0 0px", "0 0 15px rgb(255 255 255 / 0.3)"] }}
+              transition={{ duration: 1.2, repeat: Infinity }}
+              style={{ zIndex: -1 }}
+            ></motion.div>
+          )}
         </button>
+
       </div>
 
       {/* Player hands */}
@@ -112,8 +139,8 @@ export const GameTable = ({
           >
             <div
               className={`text-sm font-semibold px-3 py-1 rounded-full backdrop-blur-sm ${player.id === activePlayerId
-                  ? "bg-green-600 text-white"
-                  : "bg-black/40 text-white/90"
+                ? "bg-green-600 text-white"
+                : "bg-black/40 text-white/90"
                 }`}
             >
               {isCurrent ? "You" : player.nickname}

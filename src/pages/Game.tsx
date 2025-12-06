@@ -186,7 +186,7 @@ export default function Game() {
                 <motion.div
                   key={color}
                   className="absolute top-0 cursor-pointer"
-                  style={{ left: "50%" }}
+                  style={{ left: "42%" }}
                   initial={{ y: -50, scale: 0.8, opacity: 0 }}
                   animate={{ y: 0, scale: 1, opacity: 1, rotate: rotation, x: offsetX }}
                   whileHover={{ scale: 1.1, y: -10, zIndex: 10 }}

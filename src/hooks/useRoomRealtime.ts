@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { toast } from "sonner";
 import type { VisibleCard } from "../lib/types";
+
 type CardSide = "light" | "dark";
 
 export function useRoomRealtime(roomId?: string) {
@@ -14,7 +15,41 @@ export function useRoomRealtime(roomId?: string) {
   const [currentCard, setCurrentCard] = useState<VisibleCard | null>(null);
 
   // -----------------------------------------------------
-  // 1) INITIAL LOAD — room, is_host, started, current_card
+  // Helper: Fetch a card by ID and apply wild-color logic
+  // -----------------------------------------------------
+  const fetchCard = async (cardId: string, roomState: any) => {
+    const { data: cardData } = await supabase
+      .from("cards")
+      .select("*")
+      .eq("id", cardId)
+      .maybeSingle();
+
+    if (!cardData) return;
+
+    const card: VisibleCard = {
+      light: {
+        color: cardData.light_color ?? "black",
+        value: cardData.light_value ?? null,
+      },
+      dark: {
+        color: cardData.dark_color ?? "black",
+        value: cardData.dark_value ?? null,
+      },
+    };
+
+    const side = roomState.current_side as CardSide ?? "light";
+    const active = card[side];
+
+    // Apply wild color
+    if (active.value?.startsWith("wild")) {
+      card[side].color = roomState.wild_color ?? "black";
+    }
+
+    setCurrentCard(card);
+  };
+
+  // -----------------------------------------------------
+  // 1) INITIAL LOAD
   // -----------------------------------------------------
   useEffect(() => {
     if (!roomId) return;
@@ -24,7 +59,6 @@ export function useRoomRealtime(roomId?: string) {
 
       const user = (await supabase.auth.getUser()).data.user;
 
-      // Fetch full room row
       const { data: roomData } = await supabase
         .from("rooms")
         .select("*")
@@ -35,13 +69,11 @@ export function useRoomRealtime(roomId?: string) {
         setRoom(roomData);
         setStarted(roomData.started_game);
 
-        // Fetch card if exists
         if (roomData.current_card) {
-          await fetchCard(roomData);
+          await fetchCard(roomData.current_card, roomData);
         }
       }
 
-      // Fetch is_host
       if (user) {
         const { data: rp } = await supabase
           .from("room_players")
@@ -60,43 +92,7 @@ export function useRoomRealtime(roomId?: string) {
   }, [roomId]);
 
   // -----------------------------------------------------
-  // Helper: Fetch and set card
-  // -----------------------------------------------------
-  const fetchCard = async (cardId: string) => {
-    const { data: cardData } = await supabase
-      .from("cards")
-      .select("*")
-      .eq("id", cardId)
-      .maybeSingle();
-
-    if (!cardData) return;
-
-    // Base card object
-    const card: VisibleCard = {
-      light: {
-        color: cardData.light_color ?? "black",
-        value: cardData.light_value ?? null,
-      },
-      dark: {
-        color: cardData.dark_color ?? "black",
-        value: cardData.dark_value ?? null,
-      },
-    };
-
-    // Get which side is active
-    const side = room?.current_side as CardSide ?? "light";
-    const active = card[side];
-
-    // 🚨 If card value begins with "wild", force color = wildColor
-    if (active.value && active.value.startsWith("wild")) {
-      card[side].color = room?.wild_color ?? "black";
-    }
-
-    setCurrentCard(card);
-  };
-
-  // -----------------------------------------------------
-  // 2) REALTIME SUB — react to all room changes (including current_card)
+  // 2) Live room updates
   // -----------------------------------------------------
   useEffect(() => {
     if (!roomId) return;
@@ -111,30 +107,39 @@ export function useRoomRealtime(roomId?: string) {
           table: "rooms",
           filter: `id=eq.${roomId}`,
         },
-        (payload) => {
-          void (async () => {
-            const newRoom = payload.new;
-            const oldRoom = payload.old;
+        async (payload) => {
+          const newRoom = payload.new;
+          const oldRoom = payload.old;
 
-            setRoom(newRoom);
+          setRoom(newRoom);
 
-            if (!started && newRoom.started_game) {
-              toast.success("Game started!");
-              setStarted(true);
-            }
-            if (!newRoom.started_game) {
-              setStarted(false);
-            }
+          if (!started && newRoom.started_game) {
+            toast.success("Game started!");
+            setStarted(true);
+          }
+          if (!newRoom.started_game) {
+            setStarted(false);
+          }
 
-            if (newRoom.current_card !== oldRoom.current_card) {
-              if (newRoom.current_card) {
-                await fetchCard(newRoom.current_card);
-              } else {
-                setCurrentCard(null);
-              }
+          // If the card ID changed → fetch new card
+          if (newRoom.current_card !== oldRoom.current_card) {
+            if (newRoom.current_card) {
+              await fetchCard(newRoom.current_card, newRoom);
+            } else {
+              setCurrentCard(null);
             }
-          })();
-        },
+            return;
+          }
+
+          // Even if card ID didn't change:
+          // wild_color OR current_side may change → update card appearance
+          const wildChanged = newRoom.wild_color !== oldRoom.wild_color;
+          const sideChanged = newRoom.current_side !== oldRoom.current_side;
+
+          if ((wildChanged || sideChanged) && newRoom.current_card) {
+            await fetchCard(newRoom.current_card, newRoom);
+          }
+        }
       )
       .subscribe();
 
@@ -143,13 +148,11 @@ export function useRoomRealtime(roomId?: string) {
     };
   }, [roomId, started]);
 
-  // -----------------------------------------------------
-  // RETURN MERGED RESULT
-  // -----------------------------------------------------
   document.documentElement.classList.toggle(
     "dark",
-    room?.current_side === "dark",
+    room?.current_side === "dark"
   );
+
   return {
     loading,
     room,
