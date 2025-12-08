@@ -107,9 +107,12 @@ export default function Lobby() {
 
       if (!res.ok) throw new Error(await res.text());
 
-      const { room, player: returnedPlayer } = await res.json();
-      localStorage.setItem("playerId", returnedPlayer.id);
-      localStorage.setItem("roomId", room.id);
+      const { room } = await res.json();
+
+      // const { room, player: returnedPlayer } = await res.json();
+      // localStorage.setItem("playerId", returnedPlayer.id);
+
+      // localStorage.setItem("playerId", returnedPlayer.id);     // localStorage.setItem("roomId", room.id);
 
       toast.success(`Room ${room.code} created!`);
       navigate(`/room/${room.id}`);
@@ -118,6 +121,70 @@ export default function Lobby() {
       toast.error(err instanceof Error ? err.message : "Failed to create room");
     }
   };
+
+  async function fetchRoomAndPlayers(playerId: string) {
+  const { data, error } = await supabase
+    .from("room_players")
+    .select(`
+      room_id,
+      room:rooms (
+        id,
+        code,
+        host_id,
+        players_in_room:room_players (
+          player_id,
+          is_host,
+          players ( nickname )
+        )
+      )
+    `)
+    .eq("player_id", playerId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+
+  useEffect(() => {
+    const autojoin = async () => {
+      if (!player?.id) return;
+
+      try {
+        const roomInfo = await fetchRoomAndPlayers(player.id);
+
+        // If this player belongs to a room, auto-redirect
+        if (roomInfo?.room_id) {
+          navigate(`/room/${roomInfo.room_id}`);
+        }
+      } catch (err) {
+        console.error("Autojoin failed:", err);
+      }
+    };
+
+    autojoin();
+  }, [player]);
+
+  // ----- Autojoin effect -----
+  useEffect(() => {
+    const autojoin = async () => {
+      if (!player?.id) return;
+
+      try {
+        const roomInfo = await fetchRoomAndPlayers(player.id);
+        if (roomInfo?.room_id) {
+          navigate(`/room/${roomInfo.room_id}`);
+        }
+      } catch (err) {
+        console.error("Autojoin failed:", err);
+      }
+    };
+
+    autojoin();
+  }, [player]);
+
+
+
 
   return (
     <div>

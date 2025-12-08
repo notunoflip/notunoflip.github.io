@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { getFanStyle, type PlayerCard, type VisibleCard } from "../lib/types";
 import { Card } from "./Card";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 interface GameTableProps {
   cards: PlayerCard[];
@@ -68,6 +68,7 @@ export const GameTable = ({
 
   const isYourTurn = activePlayerId === currentUserId;
 
+
   return (
     <div className="relative w-full h-[80vh] flex items-center justify-center">
       {/* Center piles */}
@@ -87,8 +88,8 @@ export const GameTable = ({
           onClick={() => isYourTurn && onDrawCard?.()}
           disabled={!isYourTurn}
           className={`relative group transition-transform ${isYourTurn
-              ? "hover:scale-105"
-              : "opacity-40 cursor-not-allowed"
+            ? "hover:scale-105"
+            : "opacity-40 cursor-not-allowed"
             }`}
         >
 
@@ -131,6 +132,33 @@ export const GameTable = ({
         const isCurrent = player.id === currentUserId;
         const pos = getPlayerPosition(i);
 
+        const clickTimeout = useRef<NodeJS.Timeout | null>(null);
+
+        const handleCardClick = (index: number, card: PlayerCard) => {
+          if (!isCurrent || !isYourTurn) return;
+
+          // If this is the second click within the threshold → treat as double click
+          if (clickTimeout.current) {
+            clearTimeout(clickTimeout.current);
+            clickTimeout.current = null;
+
+            // 👉 DOUBLE CLICK = PLAY CARD
+            onCardPlay?.(card);
+            setSelectedCard(null);
+            return;
+          }
+
+          // 👉 FIRST CLICK → set a timer to wait for a second click
+          clickTimeout.current = setTimeout(() => {
+            clickTimeout.current = null;
+
+            // 👉 SINGLE CLICK = FLIP CARD
+            setSelectedCard(index);
+
+          }, 250); // delay before deciding it's a single click
+        };
+
+
         return (
           <motion.div
             key={player.id}
@@ -168,20 +196,7 @@ export const GameTable = ({
                         ? { scale: 1.1, y: -20, zIndex: 10 }
                         : { scale: 1, y: 0, zIndex: 1 }
                     }
-                    onClick={() => {
-                      if (isCurrent && isYourTurn) {
-                        setSelectedCard(index);
-
-                        // ✅ UPDATED: pass full card object
-                        onCardPlay?.(card);
-                      }
-                    }}
-                    onDoubleClick={() => {
-                      if (isCurrent && isYourTurn) {
-                        onCardPlay?.(card);
-                        setSelectedCard(null);
-                      }
-                    }}
+                    onClick={() => handleCardClick(index, card)}
                   >
                     <Card
                       lightColor={light.color ?? "red"}

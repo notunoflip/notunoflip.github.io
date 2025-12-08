@@ -136,10 +136,11 @@ useEffect(() => {
 
       if (!res.ok) throw new Error(await res.text());
 
-      const { room, playerId } = await res.json();
+      const { room } = await res.json();
 
-      localStorage.setItem("playerId", playerId);
-      localStorage.setItem("roomId", room.id);
+      // const { room, playerId } = await res.json();
+      // localStorage.setItem("playerId", playerId);
+      // localStorage.setItem("roomId", room.id);
 
       toast.success(`Joined room ${room.code}`);
       navigate(`/room/${room.id}`);

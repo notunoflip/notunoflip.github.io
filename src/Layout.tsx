@@ -19,7 +19,16 @@ export default function Layout() {
       setSession(session);
       if (session) {
         toast.success(`Logged in as ${session.user.email}`);
-      } else {
+
+        // Check for pending redirect
+        const pending = localStorage.getItem("pendingRoomRedirect");
+        if (pending) {
+          localStorage.removeItem("pendingRoomRedirect");
+          navigate(pending);
+          return;
+        }
+      }
+      else {
         toast.info("You have been logged out");
         navigate("/");
       }
@@ -29,6 +38,14 @@ export default function Layout() {
   }, []);
 
   const handleLogout = async () => {
+    // Save current URL if it is a room URL
+    const currentPath = window.location.pathname;
+
+    // Only store if user is actually in a room
+    if (currentPath.startsWith("/room/")) {
+      localStorage.setItem("pendingRoomRedirect", currentPath);
+    }
+
     await supabase.auth.signOut();
     setSession(null);
     toast.success("Successfully logged out");
