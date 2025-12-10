@@ -29,6 +29,13 @@ export default function Layout() {
         }
       }
       else {
+        // Save current URL if it is a room URL
+        const currentPath = window.location.pathname;
+
+        // Only store if user is actually in a room
+        if (currentPath.startsWith("/room/")) {
+          localStorage.setItem("pendingRoomRedirect", currentPath);
+        }
         toast.info("You have been logged out");
         navigate("/");
       }
@@ -38,14 +45,6 @@ export default function Layout() {
   }, []);
 
   const handleLogout = async () => {
-    // Save current URL if it is a room URL
-    const currentPath = window.location.pathname;
-
-    // Only store if user is actually in a room
-    if (currentPath.startsWith("/room/")) {
-      localStorage.setItem("pendingRoomRedirect", currentPath);
-    }
-
     await supabase.auth.signOut();
     setSession(null);
     toast.success("Successfully logged out");

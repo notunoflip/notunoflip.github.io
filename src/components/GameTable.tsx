@@ -29,6 +29,10 @@ export const GameTable = ({
 }: GameTableProps) => {
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
 
+  const isYourTurn = activePlayerId === currentUserId;
+  const clickTimeouts = useRef<Record<string, NodeJS.Timeout | null>>({});
+
+
   if (!cards?.length) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400">
@@ -66,7 +70,33 @@ export const GameTable = ({
     return { transform: `translate(${x}px, ${y}px)` };
   };
 
-  const isYourTurn = activePlayerId === currentUserId;
+  // A helper to get/set per-player timeout
+  const handleCardClick = (
+    playerId: string,
+    index: number,
+    card: PlayerCard
+  ) => {
+    if (!isYourTurn || playerId !== currentUserId) return;
+
+    const timeout = clickTimeouts.current[playerId];
+
+    // DOUBLE CLICK
+    if (timeout) {
+      clearTimeout(timeout);
+      clickTimeouts.current[playerId] = null;
+
+      onCardPlay?.(card);
+      setSelectedCard(null);
+      return;
+    }
+
+    // SINGLE CLICK (start delay)
+    clickTimeouts.current[playerId] = setTimeout(() => {
+      clickTimeouts.current[playerId] = null;
+
+      setSelectedCard(index);
+    }, 250);
+  };
 
 
   return (
@@ -132,33 +162,6 @@ export const GameTable = ({
         const isCurrent = player.id === currentUserId;
         const pos = getPlayerPosition(i);
 
-        const clickTimeout = useRef<NodeJS.Timeout | null>(null);
-
-        const handleCardClick = (index: number, card: PlayerCard) => {
-          if (!isCurrent || !isYourTurn) return;
-
-          // If this is the second click within the threshold → treat as double click
-          if (clickTimeout.current) {
-            clearTimeout(clickTimeout.current);
-            clickTimeout.current = null;
-
-            // 👉 DOUBLE CLICK = PLAY CARD
-            onCardPlay?.(card);
-            setSelectedCard(null);
-            return;
-          }
-
-          // 👉 FIRST CLICK → set a timer to wait for a second click
-          clickTimeout.current = setTimeout(() => {
-            clickTimeout.current = null;
-
-            // 👉 SINGLE CLICK = FLIP CARD
-            setSelectedCard(index);
-
-          }, 250); // delay before deciding it's a single click
-        };
-
-
         return (
           <motion.div
             key={player.id}
@@ -196,7 +199,7 @@ export const GameTable = ({
                         ? { scale: 1.1, y: -20, zIndex: 10 }
                         : { scale: 1, y: 0, zIndex: 1 }
                     }
-                    onClick={() => handleCardClick(index, card)}
+                    onClick={() => handleCardClick(player.id, index, card)}
                   >
                     <Card
                       lightColor={light.color ?? "red"}
@@ -216,6 +219,7 @@ export const GameTable = ({
           </motion.div>
         );
       })}
+
     </div>
   );
 };

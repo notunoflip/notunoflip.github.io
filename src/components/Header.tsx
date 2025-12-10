@@ -2,7 +2,7 @@ import { User, LogOut, Settings, DoorOpen } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { useState, useRef, useEffect } from "react";
 import { useNickname } from "../hooks/useNickname"; // adjust path if needed
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 const LOCAL_EDGE_URL = import.meta.env.VITE_SUPABASE_URL + "/functions/v1";
@@ -18,8 +18,9 @@ const Header: React.FC<HeaderProps> = ({ session, onLogout, onSettings }) => {
   const { nickname, loading } = useNickname();
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  const location = useLocation();
-  const isInRoom = location.pathname.startsWith("/room/");
+  const { roomCode } = useParams<{ roomCode: string }>();
+  const isInRoom = !!roomCode;
+
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -36,8 +37,7 @@ const Header: React.FC<HeaderProps> = ({ session, onLogout, onSettings }) => {
 
   const handleLeaveRoom = async () => {
     if (!session) return;
-    const roomId = localStorage.getItem("roomId");
-    if (!roomId) {
+    if (!roomCode) {
       toast.error("No active room found.");
       return;
     }
@@ -51,20 +51,21 @@ const Header: React.FC<HeaderProps> = ({ session, onLogout, onSettings }) => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ roomId }), // ✅ add this line
+        body: JSON.stringify({ roomCode }), 
       });
 
 
 
       if (!res.ok) throw new Error(await res.text());
+      localStorage.removeItem("pendingRoomRedirect");
+
 
       // cleanup local state
-      localStorage.removeItem("roomId");
       toast.success("You left the room.");
       navigate("/", { replace: true });
     } catch (err) {
       console.error(err);
-      toast.error("Failed to leave room.");
+      navigate("/", { replace: true });
     }
   };
 

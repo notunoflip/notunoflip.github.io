@@ -5,7 +5,7 @@ import type { VisibleCard } from "../lib/types";
 
 type CardSide = "light" | "dark";
 
-export function useRoomRealtime(roomId?: string) {
+export function useRoomRealtime(roomCode?: string) {
   const [room, setRoom] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -52,7 +52,7 @@ export function useRoomRealtime(roomId?: string) {
   // 1) INITIAL LOAD
   // -----------------------------------------------------
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomCode) return;
 
     const load = async () => {
       setLoading(true);
@@ -62,7 +62,7 @@ export function useRoomRealtime(roomId?: string) {
       const { data: roomData } = await supabase
         .from("rooms")
         .select("*")
-        .eq("id", roomId)
+        .eq("code", roomCode)
         .maybeSingle();
 
       if (roomData) {
@@ -78,7 +78,7 @@ export function useRoomRealtime(roomId?: string) {
         const { data: rp } = await supabase
           .from("room_players")
           .select("is_host")
-          .eq("room_id", roomId)
+          .eq("room_id", roomData.id)
           .eq("player_id", user.id)
           .maybeSingle();
 
@@ -89,23 +89,23 @@ export function useRoomRealtime(roomId?: string) {
     };
 
     load();
-  }, [roomId]);
+  }, [roomCode]);
 
   // -----------------------------------------------------
   // 2) Live room updates
   // -----------------------------------------------------
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomCode) return;
 
     const channel = supabase
-      .channel(`room-${roomId}-merged`)
+      .channel(`room-${roomCode}-merged`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
           table: "rooms",
-          filter: `id=eq.${roomId}`,
+          filter: `code=eq.${roomCode}`,
         },
         async (payload) => {
           const newRoom = payload.new;
@@ -146,7 +146,7 @@ export function useRoomRealtime(roomId?: string) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roomId, started]);
+  }, [roomCode, started]);
 
   document.documentElement.classList.toggle(
     "dark",
@@ -157,8 +157,9 @@ export function useRoomRealtime(roomId?: string) {
     loading,
     room,
     isHost,
-    started,
+    started: room?.started_game ?? false,
 
+    roomId: room?.id ?? null,
     activePlayerId: room?.turn_player_id ?? null,
     currentSide: room?.current_side as CardSide ?? "light",
     currentCardId: room?.current_card ?? null,

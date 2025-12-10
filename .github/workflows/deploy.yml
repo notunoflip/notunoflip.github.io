@@ -14,7 +14,6 @@ jobs:
         with:
           node-version: 18
 
-      # Debug secrets (optional)
       - name: Debug environment variables
         run: |
           echo "URL: $VITE_SUPABASE_URL"
@@ -34,6 +33,9 @@ jobs:
 
       - name: Copy index.html to 404.html
         run: cp ./dist/index.html ./dist/404.html
+
+      - name: Add CNAME file
+        run: echo "unoflip.site" > ./dist/CNAME
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3

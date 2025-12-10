@@ -21,7 +21,7 @@ const LOCAL_EDGE_URL = import.meta.env.VITE_SUPABASE_URL + "/functions/v1";
 
 export default function Game() {
   const { session } = useOutletContext<{ session: Session | null }>();
-  const { roomId } = useParams<{ roomId: string }>();
+  const { roomCode } = useParams<{ roomCode: string }>();
 
 
   const {
@@ -32,10 +32,10 @@ export default function Game() {
     currentSide,
     currentCard,
     winner,
-  } = useRoomRealtime(roomId);
+    roomId
+  } = useRoomRealtime(roomCode);
 
   const { tableCards, previewCard } = useRoomCards(session, roomId, started);
-
   const [showWildModal, setShowWildModal] = useState(false);
   const [pendingWildCard, setPendingWildCard] = useState<PlayerCard | null>(null);
 
@@ -49,6 +49,7 @@ export default function Game() {
       const { data: sessionData, error: sessionErr } = await fetchSession();
       if (sessionErr || !sessionData?.session) throw new Error("No active session");
 
+      console.log(roomId)
       toast.info("Starting game...");
       const res = await fetch(`${LOCAL_EDGE_URL}/start-game`, {
         method: "POST",
@@ -113,6 +114,7 @@ export default function Game() {
   useEffect(() => {
     const autoJoinRoom = async () => {
       if (!session || !roomId) return;
+      console.log(roomId)
 
       // 1. Check if user is already part of this room
       const { data: existing, error } = await supabase
@@ -132,18 +134,22 @@ export default function Game() {
 
       // 2. Not in room: attempt join
       try {
-        const token = session.access_token;
+        const {
+          data: { session },
+          error: sessionErr,
+        } = await supabase.auth.getSession();
+
+        if (sessionErr || !session) throw new Error("No active session");
+
+        toast.info("Joining room...");
 
         const res = await fetch(`${LOCAL_EDGE_URL}/join-room`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({
-            room_id: roomId,
-            player_id: session.user.id,
-          }),
+          body: JSON.stringify({ roomCode: roomCode })
         });
 
         if (!res.ok) {
@@ -198,7 +204,7 @@ export default function Game() {
         <div className="max-w-md w-full rounded-2xl shadow-xl p-6 space-y-5 bg-gray-100 text-black border border-gray-200">
           <h1 className="text-2xl font-bold text-center">Waiting Room</h1>
           <GameWaiting
-            roomId={roomId}
+            roomCode={roomCode}
             winner={winner}
             currentCard={currentCard}
             currentSide={currentSide}

@@ -4,16 +4,43 @@ import { supabase } from "../lib/supabaseClient";
 export interface RoomPlayer {
   player_id: string;
   is_host: boolean;
-  players: { nickname: string };
+  players: { nickname: string }[]; // ✅ array
 }
 
-export function useRoomPlayers(roomId: string) {
+
+export function useRoomPlayers(roomCode: string) {
   const [players, setPlayers] = useState<RoomPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [roomId, setRoomId] = useState<string | null>(null);
 
-  // Fetch players once
+  // 1️⃣ Resolve roomCode → roomId ONCE
+  useEffect(() => {
+    if (!roomCode) return;
+
+    const resolveRoom = async () => {
+      const { data, error } = await supabase
+        .from("rooms")
+        .select("id")
+        .eq("code", roomCode)
+        .single();
+
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      setRoomId(data.id);
+    };
+
+    resolveRoom();
+  }, [roomCode]);
+
+  // 2️⃣ Fetch players using roomId
   const fetchPlayers = async () => {
+    if (!roomId) return;
+
     setLoading(true);
 
     const { data, error } = await supabase
@@ -28,16 +55,18 @@ export function useRoomPlayers(roomId: string) {
       return;
     }
 
-    const mapped = (data || []).map((p: any) => ({
-      player_id: p.player_id,
-      is_host: p.is_host,
-      players: p.players ?? { nickname: "Unknown" },
-    }));
+    setPlayers(
+      (data || []).map((p) => ({
+        player_id: p.player_id,
+        is_host: p.is_host,
+        players: p.players ?? { nickname: "Unknown" },
+      }))
+    );
 
-    setPlayers(mapped);
     setLoading(false);
   };
 
+  // 3️⃣ Fetch + realtime subscription
   useEffect(() => {
     if (!roomId) return;
 

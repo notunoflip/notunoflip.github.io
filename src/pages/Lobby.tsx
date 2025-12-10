@@ -109,23 +109,31 @@ export default function Lobby() {
 
       const { room } = await res.json();
 
-      // const { room, player: returnedPlayer } = await res.json();
-      // localStorage.setItem("playerId", returnedPlayer.id);
-
-      // localStorage.setItem("playerId", returnedPlayer.id);     // localStorage.setItem("roomId", room.id);
-
       toast.success(`Room ${room.code} created!`);
-      navigate(`/room/${room.id}`);
+      navigate(`/room/${room.code}`);
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Failed to create room");
     }
   };
 
-  async function fetchRoomAndPlayers(playerId: string) {
-  const { data, error } = await supabase
-    .from("room_players")
-    .select(`
+  type FetchRoomResult = {
+    roomId: string;
+    roomCode: string;
+    hostId: string;
+    players: {
+      player_id: string;
+      is_host: boolean;
+      players: {
+        nickname: string;
+      };
+    }[];
+  } | null;
+
+  async function fetchRoomAndPlayers(playerId: string): Promise<FetchRoomResult> {
+    const { data, error } = await supabase
+      .from("room_players")
+      .select(`
       room_id,
       room:rooms (
         id,
@@ -138,12 +146,22 @@ export default function Lobby() {
         )
       )
     `)
-    .eq("player_id", playerId)
-    .maybeSingle();
+      .eq("player_id", playerId)
+      .maybeSingle();
 
-  if (error) throw error;
-  return data;
-}
+    if (error) throw error;
+    if (!data?.room?.[0]) return null;
+
+    const room = data.room[0];
+
+    return {
+      roomId: room.id,
+      roomCode: room.code,
+      hostId: room.host_id,
+      players: room.players_in_room ?? [],
+    };
+  }
+
 
 
   useEffect(() => {
@@ -152,10 +170,10 @@ export default function Lobby() {
 
       try {
         const roomInfo = await fetchRoomAndPlayers(player.id);
+        console.log(roomInfo);
 
-        // If this player belongs to a room, auto-redirect
-        if (roomInfo?.room_id) {
-          navigate(`/room/${roomInfo.room_id}`);
+        if (roomInfo?.roomCode) {
+          navigate(`/room/${roomInfo.roomCode}`);
         }
       } catch (err) {
         console.error("Autojoin failed:", err);
@@ -165,23 +183,7 @@ export default function Lobby() {
     autojoin();
   }, [player]);
 
-  // ----- Autojoin effect -----
-  useEffect(() => {
-    const autojoin = async () => {
-      if (!player?.id) return;
 
-      try {
-        const roomInfo = await fetchRoomAndPlayers(player.id);
-        if (roomInfo?.room_id) {
-          navigate(`/room/${roomInfo.room_id}`);
-        }
-      } catch (err) {
-        console.error("Autojoin failed:", err);
-      }
-    };
-
-    autojoin();
-  }, [player]);
 
 
 
