@@ -11,7 +11,7 @@ import { getFanStyle, type CardColor, type PlayerCard } from "../lib/types";
 
 import { useRoomCards } from "../hooks/useRoomCards";
 import { useRoomRealtime } from "../hooks/useRoomRealtime";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Modal from "../components/Modal";
 import { Card } from "../components/Card";
 import { motion } from "framer-motion";
@@ -21,7 +21,7 @@ const LOCAL_EDGE_URL = import.meta.env.VITE_SUPABASE_URL + "/functions/v1";
 
 export default function Game() {
   const { session } = useOutletContext<{ session: Session | null }>();
-  const { roomId } = useParams<{ roomId: string }>();
+  const { roomCode } = useParams<{ roomCode: string }>();
 
 
   const {
@@ -32,10 +32,10 @@ export default function Game() {
     currentSide,
     currentCard,
     winner,
-  } = useRoomRealtime(roomId);
+    roomId
+  } = useRoomRealtime(roomCode);
 
   const { tableCards, previewCard } = useRoomCards(session, roomId, started);
-
   const [showWildModal, setShowWildModal] = useState(false);
   const [pendingWildCard, setPendingWildCard] = useState<PlayerCard | null>(null);
 
@@ -49,6 +49,7 @@ export default function Game() {
       const { data: sessionData, error: sessionErr } = await fetchSession();
       if (sessionErr || !sessionData?.session) throw new Error("No active session");
 
+      console.log(roomId)
       toast.info("Starting game...");
       const res = await fetch(`${LOCAL_EDGE_URL}/start-game`, {
         method: "POST",
@@ -80,9 +81,9 @@ export default function Game() {
       value === "wild_draw_two" ||
       value === "wild_draw_until";
 
-      if (isWild) {
-        setPendingWildCard(roomCard);
-        setShowWildModal(true)
+    if (isWild) {
+      setPendingWildCard(roomCard);
+      setShowWildModal(true)
       return;
     }
 
@@ -110,6 +111,64 @@ export default function Game() {
   };
 
 
+  useEffect(() => {
+    const autoJoinRoom = async () => {
+      if (!session || !roomId) return;
+      console.log(roomId)
+
+      // 1. Check if user is already part of this room
+      const { data: existing, error } = await supabase
+        .from("room_players")
+        .select("player_id")
+        .eq("room_id", roomId)
+        .eq("player_id", session.user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Failed to check room membership:", error);
+        return;
+      }
+
+      // Already in room → no action needed
+      if (existing) return;
+
+      // 2. Not in room: attempt join
+      try {
+        const {
+          data: { session },
+          error: sessionErr,
+        } = await supabase.auth.getSession();
+
+        if (sessionErr || !session) throw new Error("No active session");
+
+        toast.info("Joining room...");
+
+        const res = await fetch(`${LOCAL_EDGE_URL}/join-room`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ roomCode: roomCode })
+        });
+
+        if (!res.ok) {
+          const msg = await res.text();
+          console.warn("Join room failed:", msg);
+          // Room could be full → stay spectator
+          toast.info("You're viewing as a spectator.");
+          return;
+        }
+
+        toast.success("Joined room!");
+      } catch (err) {
+        console.error("Join error:", err);
+        toast.error("Could not join room");
+      }
+    };
+
+    autoJoinRoom();
+  }, [session, roomId]);
 
 
   // ✅ Draw a card
@@ -145,7 +204,7 @@ export default function Game() {
         <div className="max-w-md w-full rounded-2xl shadow-xl p-6 space-y-5 bg-gray-100 text-black border border-gray-200">
           <h1 className="text-2xl font-bold text-center">Waiting Room</h1>
           <GameWaiting
-            roomId={roomId}
+            roomCode={roomCode}
             winner={winner}
             currentCard={currentCard}
             currentSide={currentSide}
@@ -169,48 +228,48 @@ export default function Game() {
   return (
     <div className="pt-16">
 
-        <Modal
-          open={showWildModal}
-          onClose={() => {
-            setShowWildModal(false);
-            setPendingWildCard(null);
-          }}
-        >
-          <h2 className="text-xl font-bold text-center mb-4">Choose a Color</h2>
+      <Modal
+        open={showWildModal}
+        onClose={() => {
+          setShowWildModal(false);
+          setPendingWildCard(null);
+        }}
+      >
+        <h2 className="text-xl font-bold text-center mb-4">Choose a Color</h2>
 
-          <div className="relative h-36">
-            {["red", "yellow", "green", "blue"].map((color, index, arr) => {
-              const { rotation, offsetX } = getFanStyle(index, arr.length, 60);
+        <div className="relative h-36">
+          {["red", "yellow", "green", "blue"].map((color, index, arr) => {
+            const { rotation, offsetX } = getFanStyle(index, arr.length, 60);
 
-              return (
-                <motion.div
-                  key={color}
-                  className="absolute top-0 cursor-pointer"
-                  style={{ left: "42%" }}
-                  initial={{ y: -50, scale: 0.8, opacity: 0 }}
-                  animate={{ y: 0, scale: 1, opacity: 1, rotate: rotation, x: offsetX }}
-                  whileHover={{ scale: 1.1, y: -10, zIndex: 10 }}
-                  onClick={() => {
-                    if (!pendingWildCard) return;
-                    playCardRPC(pendingWildCard, color);
-                    setShowWildModal(false);
-                  }}
-                >
-                  <Card
-                    lightColor={color as CardColor}
-                    lightValue="wild"
-                    darkColor={color as CardColor}
-                    darkValue="wild"
-                    isHoverable={false}
-                    showBothSides={true}
-                    isDarkSide={currentSide === "dark"}
-                    rotation={0} // rotation handled by motion.div
-                  />
-                </motion.div>
-              );
-            })}
-          </div>
-        </Modal>
+            return (
+              <motion.div
+                key={color}
+                className="absolute top-0 cursor-pointer"
+                style={{ left: "42%" }}
+                initial={{ y: -50, scale: 0.8, opacity: 0 }}
+                animate={{ y: 0, scale: 1, opacity: 1, rotate: rotation, x: offsetX }}
+                whileHover={{ scale: 1.1, y: -10, zIndex: 10 }}
+                onClick={() => {
+                  if (!pendingWildCard) return;
+                  playCardRPC(pendingWildCard, color);
+                  setShowWildModal(false);
+                }}
+              >
+                <Card
+                  lightColor={color as CardColor}
+                  lightValue="wild"
+                  darkColor={color as CardColor}
+                  darkValue="wild"
+                  isHoverable={false}
+                  showBothSides={true}
+                  isDarkSide={currentSide === "dark"}
+                  rotation={0} // rotation handled by motion.div
+                />
+              </motion.div>
+            );
+          })}
+        </div>
+      </Modal>
 
 
 

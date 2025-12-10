@@ -8,22 +8,22 @@ import { useNavigate } from "react-router-dom";
 import { useRoomPlayers } from "../hooks/useRoomPlayers";
 
 interface GameWaitingProps {
-  roomId: string;
+  roomCode: string;
   winner?: any;          // winner object from useWinner()
   currentCard?: any;     // visible current card
   currentSide?: "light" | "dark";
 }
 
 export default function GameWaiting({
-  roomId,
+  roomCode,
   winner,
   currentCard,
   currentSide,
 }: GameWaitingProps) {
   const navigate = useNavigate();
-  const roomUrl = `unoflip.site/room/${roomId}`;
+  const roomUrl = `unoflip.site/room/${roomCode}`;
 
-  const { players, loading, error } = useRoomPlayers(roomId);
+  const { players, loading, error } = useRoomPlayers(roomCode);
 
   const copyUrl = async () => {
     await navigator.clipboard.writeText(roomUrl);

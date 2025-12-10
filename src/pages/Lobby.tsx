@@ -107,17 +107,86 @@ export default function Lobby() {
 
       if (!res.ok) throw new Error(await res.text());
 
-      const { room, player: returnedPlayer } = await res.json();
-      localStorage.setItem("playerId", returnedPlayer.id);
-      localStorage.setItem("roomId", room.id);
+      const { room } = await res.json();
 
       toast.success(`Room ${room.code} created!`);
-      navigate(`/room/${room.id}`);
+      navigate(`/room/${room.code}`);
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Failed to create room");
     }
   };
+
+  type FetchRoomResult = {
+    roomId: string;
+    roomCode: string;
+    hostId: string;
+    players: {
+      player_id: string;
+      is_host: boolean;
+      players: {
+        nickname: string;
+      };
+    }[];
+  } | null;
+
+  async function fetchRoomAndPlayers(playerId: string): Promise<FetchRoomResult> {
+    const { data, error } = await supabase
+      .from("room_players")
+      .select(`
+      room_id,
+      room:rooms (
+        id,
+        code,
+        host_id,
+        players_in_room:room_players (
+          player_id,
+          is_host,
+          players ( nickname )
+        )
+      )
+    `)
+      .eq("player_id", playerId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data?.room?.[0]) return null;
+
+    const room = data.room[0];
+
+    return {
+      roomId: room.id,
+      roomCode: room.code,
+      hostId: room.host_id,
+      players: room.players_in_room ?? [],
+    };
+  }
+
+
+
+  useEffect(() => {
+    const autojoin = async () => {
+      if (!player?.id) return;
+
+      try {
+        const roomInfo = await fetchRoomAndPlayers(player.id);
+        console.log(roomInfo);
+
+        if (roomInfo?.roomCode) {
+          navigate(`/room/${roomInfo.roomCode}`);
+        }
+      } catch (err) {
+        console.error("Autojoin failed:", err);
+      }
+    };
+
+    autojoin();
+  }, [player]);
+
+
+
+
+
 
   return (
     <div>

@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { getFanStyle, type PlayerCard, type VisibleCard } from "../lib/types";
 import { Card } from "./Card";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 interface GameTableProps {
   cards: PlayerCard[];
@@ -28,6 +28,10 @@ export const GameTable = ({
   onDrawCard,
 }: GameTableProps) => {
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
+
+  const isYourTurn = activePlayerId === currentUserId;
+  const clickTimeouts = useRef<Record<string, NodeJS.Timeout | null>>({});
+
 
   if (!cards?.length) {
     return (
@@ -66,7 +70,34 @@ export const GameTable = ({
     return { transform: `translate(${x}px, ${y}px)` };
   };
 
-  const isYourTurn = activePlayerId === currentUserId;
+  // A helper to get/set per-player timeout
+  const handleCardClick = (
+    playerId: string,
+    index: number,
+    card: PlayerCard
+  ) => {
+    if (!isYourTurn || playerId !== currentUserId) return;
+
+    const timeout = clickTimeouts.current[playerId];
+
+    // DOUBLE CLICK
+    if (timeout) {
+      clearTimeout(timeout);
+      clickTimeouts.current[playerId] = null;
+
+      onCardPlay?.(card);
+      setSelectedCard(null);
+      return;
+    }
+
+    // SINGLE CLICK (start delay)
+    clickTimeouts.current[playerId] = setTimeout(() => {
+      clickTimeouts.current[playerId] = null;
+
+      setSelectedCard(index);
+    }, 250);
+  };
+
 
   return (
     <div className="relative w-full h-[80vh] flex items-center justify-center">
@@ -87,8 +118,8 @@ export const GameTable = ({
           onClick={() => isYourTurn && onDrawCard?.()}
           disabled={!isYourTurn}
           className={`relative group transition-transform ${isYourTurn
-              ? "hover:scale-105"
-              : "opacity-40 cursor-not-allowed"
+            ? "hover:scale-105"
+            : "opacity-40 cursor-not-allowed"
             }`}
         >
 
@@ -168,20 +199,7 @@ export const GameTable = ({
                         ? { scale: 1.1, y: -20, zIndex: 10 }
                         : { scale: 1, y: 0, zIndex: 1 }
                     }
-                    onClick={() => {
-                      if (isCurrent && isYourTurn) {
-                        setSelectedCard(index);
-
-                        // ✅ UPDATED: pass full card object
-                        onCardPlay?.(card);
-                      }
-                    }}
-                    onDoubleClick={() => {
-                      if (isCurrent && isYourTurn) {
-                        onCardPlay?.(card);
-                        setSelectedCard(null);
-                      }
-                    }}
+                    onClick={() => handleCardClick(player.id, index, card)}
                   >
                     <Card
                       lightColor={light.color ?? "red"}
@@ -201,6 +219,7 @@ export const GameTable = ({
           </motion.div>
         );
       })}
+
     </div>
   );
 };
