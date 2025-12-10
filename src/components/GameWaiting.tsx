@@ -101,7 +101,7 @@ export default function GameWaiting({
             >
               <span className="font-medium flex items-center gap-2">
                 <User className="w-6 h-6 text-gray-900 dark:text-gray-800" />
-                {p.players.nickname}
+                {p.players[0]?.nickname ?? "Unknown"}
                 {winner === p.player_id && (
                   <Trophy className="w-4 h-4 mr-1 text-yellow-500" />
                 )}

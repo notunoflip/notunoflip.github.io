@@ -190,7 +190,7 @@ export default function Game() {
   };
 
   // ✅ Loading screen
-  if (loading || !session || !roomId)
+  if (loading || !session || !roomId || !roomCode)
     return (
       <div className="flex justify-center items-center h-screen text-gray-400">
         <Loader2 className="animate-spin w-6 h-6 mr-2" /> Loading...
