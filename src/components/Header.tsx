@@ -74,7 +74,7 @@ const Header: React.FC<HeaderProps> = ({ session, onLogout, onSettings }) => {
       {/* Logo + Title */}
       <div className="flex items-center space-x-1">
         <img src="/logo_flip.png" alt="NotUnoFlip" className="h-8 w-8 rounded" />
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">NotUnoFlip</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">UnoFlip.site</h1>
       </div>
 
       {/* Right side */}

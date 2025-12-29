@@ -49,7 +49,7 @@ export function useRoomPlayers(roomCode: string) {
 
     const { data, error } = await supabase
       .from("room_players")
-      .select("player_id,is_host,last_seen,joined_at,players(nickname)")
+      .select("player_id,last_seen,joined_at,players(nickname)")
       .eq("room_id", roomId)
       .order("joined_at", { ascending: true }); // Sort by join order
 

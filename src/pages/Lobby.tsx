@@ -6,7 +6,7 @@ import Modal from "../components/Modal";
 import RoomsList from "../components/RoomsList";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { BackgroundMusic } from "../components/BackgroundMusic";
+// import { BackgroundMusic } from "../components/BackgroundMusic";
 
 const LOCAL_EDGE_URL = import.meta.env.VITE_SUPABASE_URL + "/functions/v1";
 
@@ -18,12 +18,12 @@ export default function Lobby() {
   const [nicknameInput, setNicknameInput] = useState("");
   const [nicknameOpen, setNicknameOpen] = useState(false);
   const navigate = useNavigate();
-  
-  const [musicEnabled] = useState(true);
 
-  const playlist = [
-    "/music/chill.mp3",
-  ];
+  // const [musicEnabled] = useState(true);
+
+  // const playlist = [
+  //   "/music/chill.mp3",
+  // ];
 
 
   // Restore session or prompt login
@@ -132,10 +132,9 @@ export default function Lobby() {
     hostId: string;
     players: {
       player_id: string;
-      is_host: boolean;
       players: {
         nickname: string;
-      };
+      }[]; // ✅ array
     }[];
   } | null;
 
@@ -150,13 +149,12 @@ export default function Lobby() {
         host_id,
         players_in_room:room_players (
           player_id,
-          is_host,
           players ( nickname )
         )
       )
     `)
       .eq("player_id", playerId)
-      .maybeSingle();
+      .single();
 
     if (error) throw error;
     if (!data?.room?.[0]) return null;
@@ -194,19 +192,19 @@ export default function Lobby() {
 
 
 
-
-
-
   return (
     <div>
-      <main className="p-5 text-gray-900 dark:text-white space-y-4">
-        <br /><br />
-        <button
-          className="px-4 py-2 bg-green-500 text-white rounded"
-          onClick={handleCreateRoom}
-        >
-          Create Room
-        </button>
+      <main className="p-12 mt-12 text-gray-900 dark:text-white space-y-4"> 
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-bold text-white">Lobby</h2>
+          <button
+            className="px-4 py-2 bg-green-500 text-white rounded"
+            onClick={handleCreateRoom}
+          >
+            Create Room
+          </button>
+        </div>
+
         <RoomsList />
       </main>
 
@@ -245,11 +243,11 @@ export default function Lobby() {
         </div>
       </Modal>
 
-      <BackgroundMusic 
+      {/* <BackgroundMusic 
         playlist={playlist}
         volume={0.3}
         enabled={musicEnabled}
-      />
+      /> */}
 
     </div>
   );

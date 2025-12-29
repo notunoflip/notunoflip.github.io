@@ -191,7 +191,7 @@ export function useRoomRealtime(roomCode?: string) {
     return () => clearInterval(interval);
   }, [roomCode]);
 
-  console.log(room)
+  // console.log(room)
   return {
     loading,
     room,

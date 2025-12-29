@@ -73,15 +73,6 @@ export default function GameWaiting({
     navigate("/");
   }
 
-  // console.log("HOST ID:", hostId);
-  // console.log(
-  //   "PLAYERS:",
-  //   players.map(p => ({
-  //     id: p.player_id,
-  //     nick: p.nickname,
-  //   }))
-  // );
-
 
   return (
     <div>
