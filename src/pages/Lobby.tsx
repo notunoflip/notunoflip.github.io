@@ -6,6 +6,7 @@ import Modal from "../components/Modal";
 import RoomsList from "../components/RoomsList";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { BackgroundMusic } from "../components/BackgroundMusic";
 
 const LOCAL_EDGE_URL = import.meta.env.VITE_SUPABASE_URL + "/functions/v1";
 
@@ -17,6 +18,13 @@ export default function Lobby() {
   const [nicknameInput, setNicknameInput] = useState("");
   const [nicknameOpen, setNicknameOpen] = useState(false);
   const navigate = useNavigate();
+  
+  const [musicEnabled] = useState(true);
+
+  const playlist = [
+    "/music/chill.mp3",
+  ];
+
 
   // Restore session or prompt login
   useEffect(() => {
@@ -85,6 +93,7 @@ export default function Lobby() {
     setPlayer(data?.[0] || { id: session.user.id, nickname: nicknameInput });
     setNicknameOpen(false);
     toast.success("Nickname saved!");
+    window.location.reload();
   };
 
   const handleCreateRoom = async () => {
@@ -235,6 +244,13 @@ export default function Lobby() {
           </button>
         </div>
       </Modal>
+
+      <BackgroundMusic 
+        playlist={playlist}
+        volume={0.3}
+        enabled={musicEnabled}
+      />
+
     </div>
   );
 }

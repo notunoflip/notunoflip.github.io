@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
 import { useRoomPlayers } from "../hooks/useRoomPlayers";
+import { useRoomRealtime } from "../hooks/useRoomRealtime";
 
 interface GameWaitingProps {
   roomCode: string;
@@ -24,6 +25,18 @@ export default function GameWaiting({
   const roomUrl = `unoflip.site/room/${roomCode}`;
 
   const { players, loading, error } = useRoomPlayers(roomCode);
+  const { hostId } = useRoomRealtime(roomCode)
+
+
+  const isInactive = (lastSeen?: string) => {
+    if (!lastSeen) return true;
+
+    const last = new Date(lastSeen).getTime();
+    const now = Date.now();
+
+    return now - last > 40_000; // 40 seconds
+  };
+
 
   const copyUrl = async () => {
     await navigator.clipboard.writeText(roomUrl);
@@ -60,6 +73,16 @@ export default function GameWaiting({
     navigate("/");
   }
 
+  // console.log("HOST ID:", hostId);
+  // console.log(
+  //   "PLAYERS:",
+  //   players.map(p => ({
+  //     id: p.player_id,
+  //     nick: p.nickname,
+  //   }))
+  // );
+
+
   return (
     <div>
       {/* --- COPY URL BAR --- */}
@@ -86,35 +109,43 @@ export default function GameWaiting({
           className="flex-1 divide-y divide-gray-200 dark:divide-gray-700 rounded-lg 
                    border border-gray-200 dark:border-gray-800 overflow-hidden"
         >
-          {players.map((p) => (
-            <li
-              key={p.player_id}
-              className={`flex items-center justify-between px-4 py-3 transition relative overflow-hidden
-                hover:bg-gray-50 dark:text-gray-800 dark:hover:bg-gray-300
-                ${
-                  winner === p.player_id
-                    ? `before:absolute before:inset-1 before:rounded-md
-                       before:bg-yellow-200 before:blur-lg before:opacity-40 before:-z-10
-                       animate-pulse`
-                    : ""
-                }`}
-            >
-              <span className="font-medium flex items-center gap-2">
-                <User className="w-6 h-6 text-gray-900 dark:text-gray-800" />
-                {p.players[0]?.nickname ?? "Unknown"}
-                {winner === p.player_id && (
-                  <Trophy className="w-4 h-4 mr-1 text-yellow-500" />
-                )}
-              </span>
+          {players.map((p) => {
+            const inactive = isInactive(p.last_seen);
 
-              {p.is_host && (
-                <div className="flex items-center text-yellow-500 text-sm">
-                  <Crown className="w-4 h-4 mr-1" />
-                  Host
-                </div>
-              )}
-            </li>
-          ))}
+            return (
+              <li
+                key={p.player_id}
+                className={`flex items-center justify-between px-4 py-3 transition relative overflow-hidden
+        hover:bg-gray-50 dark:hover:bg-gray-300
+        ${inactive ? "text-red-500" : "dark:text-gray-800"}
+        ${winner === p.player_id
+                    ? `before:absolute before:inset-1 before:rounded-md
+               before:bg-yellow-200 before:blur-lg before:opacity-40 before:-z-10
+               animate-pulse`
+                    : ""
+                  }`}
+              >
+                <span className="font-medium flex items-center gap-2">
+                  {/* IMPORTANT: remove hardcoded colors so red applies */}
+                  <User className="w-6 h-6" />
+
+                  {p.nickname ?? "Unknown"}
+
+                  {winner === p.player_id && (
+                    <Trophy className="w-4 h-4 text-yellow-500" />
+                  )}
+                </span>
+
+                {hostId === p.player_id && (
+                  <div className="flex items-center text-yellow-500 text-sm">
+                    <Crown className="w-4 h-4 mr-1" />
+                    Host
+                  </div>
+                )}
+              </li>
+            );
+          })}
+
         </ul>
 
         {/* RIGHT — winning card */}

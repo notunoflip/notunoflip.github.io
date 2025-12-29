@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { toast } from "sonner";
 import type { VisibleCard } from "../lib/types";
@@ -8,11 +8,18 @@ type CardSide = "light" | "dark";
 export function useRoomRealtime(roomCode?: string) {
   const [room, setRoom] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-
-  const [isHost, setIsHost] = useState(false);
   const [started, setStarted] = useState(false);
-
   const [currentCard, setCurrentCard] = useState<VisibleCard | null>(null);
+  
+  // Use ref to track current room state without causing re-renders
+  const roomRef = useRef<any>(null);
+  const startedRef = useRef(false);
+
+  // Update refs when state changes
+  useEffect(() => {
+    roomRef.current = room;
+    startedRef.current = started;
+  }, [room, started]);
 
   // -----------------------------------------------------
   // Helper: Fetch a card by ID and apply wild-color logic
@@ -22,7 +29,7 @@ export function useRoomRealtime(roomCode?: string) {
       .from("cards")
       .select("*")
       .eq("id", cardId)
-      .maybeSingle();
+      .single();
 
     if (!cardData) return;
 
@@ -37,7 +44,7 @@ export function useRoomRealtime(roomCode?: string) {
       },
     };
 
-    const side = roomState.current_side as CardSide ?? "light";
+    const side = (roomState.current_side as CardSide) ?? "light";
     const active = card[side];
 
     // Apply wild color
@@ -49,23 +56,23 @@ export function useRoomRealtime(roomCode?: string) {
   };
 
   // -----------------------------------------------------
-  // 1) INITIAL LOAD
+  // 1) INITIAL LOAD - Only runs once per roomCode
   // -----------------------------------------------------
   useEffect(() => {
     if (!roomCode) return;
 
+    let mounted = true;
+
     const load = async () => {
       setLoading(true);
-
-      const user = (await supabase.auth.getUser()).data.user;
 
       const { data: roomData } = await supabase
         .from("rooms")
         .select("*")
         .eq("code", roomCode)
-        .maybeSingle();
+        .single();
 
-      if (roomData) {
+      if (roomData && mounted) {
         setRoom(roomData);
         setStarted(roomData.started_game);
 
@@ -74,25 +81,20 @@ export function useRoomRealtime(roomCode?: string) {
         }
       }
 
-      if (user) {
-        const { data: rp } = await supabase
-          .from("room_players")
-          .select("is_host")
-          .eq("room_id", roomData.id)
-          .eq("player_id", user.id)
-          .maybeSingle();
-
-        setIsHost(rp?.is_host ?? false);
+      if (mounted) {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     load();
-  }, [roomCode]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [roomCode]); // Only depends on roomCode
 
   // -----------------------------------------------------
-  // 2) Live room updates
+  // 2) Live room updates - Uses refs to avoid stale closures
   // -----------------------------------------------------
   useEffect(() => {
     if (!roomCode) return;
@@ -111,32 +113,30 @@ export function useRoomRealtime(roomCode?: string) {
           const newRoom = payload.new;
           const oldRoom = payload.old;
 
+          // Always update to latest data
           setRoom(newRoom);
 
-          if (!started && newRoom.started_game) {
+          // Handle game start
+          if (!startedRef.current && newRoom.started_game) {
             toast.success("Game started!");
             setStarted(true);
           }
-          if (!newRoom.started_game) {
+          if (!newRoom.started_game && startedRef.current) {
             setStarted(false);
           }
 
-          // If the card ID changed → fetch new card
+          // Handle card changes
           if (newRoom.current_card !== oldRoom.current_card) {
             if (newRoom.current_card) {
               await fetchCard(newRoom.current_card, newRoom);
             } else {
               setCurrentCard(null);
             }
-            return;
-          }
-
-          // Even if card ID didn't change:
-          // wild_color OR current_side may change → update card appearance
-          const wildChanged = newRoom.wild_color !== oldRoom.wild_color;
-          const sideChanged = newRoom.current_side !== oldRoom.current_side;
-
-          if ((wildChanged || sideChanged) && newRoom.current_card) {
+          } else if (
+            newRoom.current_card &&
+            (newRoom.current_side !== oldRoom.current_side ||
+              newRoom.wild_color !== oldRoom.wild_color)
+          ) {
             await fetchCard(newRoom.current_card, newRoom);
           }
         }
@@ -146,22 +146,61 @@ export function useRoomRealtime(roomCode?: string) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roomCode, started]);
+  }, [roomCode]); // Only depends on roomCode
 
-  document.documentElement.classList.toggle(
-    "dark",
-    room?.current_side === "dark"
-  );
+  // -----------------------------------------------------
+  // 3) Heartbeat - Uses refs to avoid re-creating interval
+  // -----------------------------------------------------
+  useEffect(() => {
+    if (!roomCode) return;
 
+    const tick = async () => {
+      const currentRoom = roomRef.current;
+      if (!currentRoom?.id) return;
+
+      const user = (await supabase.auth.getUser()).data.user;
+      if (!user) return;
+
+      // Refresh room snapshot
+      const { data } = await supabase
+        .from("rooms")
+        .select("*")
+        .eq("code", roomCode)
+        .single();
+
+      if (!data) return;
+
+      // Check if any relevant fields changed
+      const shouldUpdate =
+        data.host_id !== currentRoom.host_id ||
+        data.started_game !== currentRoom.started_game ||
+        data.turn_player_id !== currentRoom.turn_player_id ||
+        data.current_side !== currentRoom.current_side ||
+        data.current_card !== currentRoom.current_card ||
+        data.winner_id !== currentRoom.winner_id;
+
+      if (shouldUpdate) {
+        setRoom(data);
+      }
+    };
+
+    // Run immediately, then every 10 seconds
+    tick();
+    const interval = setInterval(tick, 10_000);
+    
+    return () => clearInterval(interval);
+  }, [roomCode]);
+
+  console.log(room)
   return {
     loading,
     room,
-    isHost,
+    hostId: room?.host_id,
     started: room?.started_game ?? false,
 
     roomId: room?.id ?? null,
     activePlayerId: room?.turn_player_id ?? null,
-    currentSide: room?.current_side as CardSide ?? "light",
+    currentSide: (room?.current_side as CardSide) ?? "light",
     currentCardId: room?.current_card ?? null,
 
     currentCard,

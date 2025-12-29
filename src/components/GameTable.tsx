@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { getFanStyle, type PlayerCard, type VisibleCard } from "../lib/types";
 import { Card } from "./Card";
 import { useRef, useState } from "react";
+import { useRoomPlayers } from "../hooks/useRoomPlayers";
 
 interface GameTableProps {
   cards: PlayerCard[];
@@ -10,10 +11,9 @@ interface GameTableProps {
   drawCardTop?: VisibleCard | null;
   activePlayerId?: string;
   isDarkSide?: boolean;
+  roomCode?: string;
 
-  // ✅ UPDATED: now passes the full card object
   onCardPlay?: (card: PlayerCard) => void;
-
   onDrawCard?: () => void;
 }
 
@@ -24,14 +24,25 @@ export const GameTable = ({
   drawCardTop,
   activePlayerId,
   isDarkSide = false,
+  roomCode,
   onCardPlay,
   onDrawCard,
 }: GameTableProps) => {
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
-
+  const { players: playersPresence } = useRoomPlayers(roomCode || "");
   const isYourTurn = activePlayerId === currentUserId;
   const clickTimeouts = useRef<Record<string, NodeJS.Timeout | null>>({});
 
+  // Helper to check if player is inactive
+  const isInactive = (playerId: string) => {
+    const playerInfo = playersPresence.find((p) => p.player_id === playerId);
+    if (!playerInfo?.last_seen) return true;
+
+    const last = new Date(playerInfo.last_seen).getTime();
+    const now = Date.now();
+
+    return now - last > 40_000; // 40 seconds
+  };
 
   if (!cards?.length) {
     return (
@@ -70,7 +81,6 @@ export const GameTable = ({
     return { transform: `translate(${x}px, ${y}px)` };
   };
 
-  // A helper to get/set per-player timeout
   const handleCardClick = (
     playerId: string,
     index: number,
@@ -93,11 +103,9 @@ export const GameTable = ({
     // SINGLE CLICK (start delay)
     clickTimeouts.current[playerId] = setTimeout(() => {
       clickTimeouts.current[playerId] = null;
-
       setSelectedCard(index);
     }, 250);
   };
-
 
   return (
     <div className="relative w-full h-[80vh] flex items-center justify-center">
@@ -117,12 +125,12 @@ export const GameTable = ({
         <button
           onClick={() => isYourTurn && onDrawCard?.()}
           disabled={!isYourTurn}
-          className={`relative group transition-transform ${isYourTurn
-            ? "hover:scale-105"
-            : "opacity-40 cursor-not-allowed"
-            }`}
+          className={`relative group transition-transform ${
+            isYourTurn
+              ? "hover:scale-105"
+              : "opacity-40 cursor-not-allowed"
+          }`}
         >
-
           {/* Another layer */}
           <div
             className="absolute inset-0 rounded-md scale-95 bg-black/10 rotate-3"
@@ -148,19 +156,24 @@ export const GameTable = ({
           {isYourTurn && (
             <motion.div
               className="absolute inset-0 rounded-md"
-              animate={{ boxShadow: ["0 0 0px", "0 0 15px rgb(255 255 255 / 0.3)"] }}
+              animate={{
+                boxShadow: [
+                  "0 0 0px",
+                  "0 0 15px rgb(255 255 255 / 0.3)",
+                ],
+              }}
               transition={{ duration: 1.2, repeat: Infinity }}
               style={{ zIndex: -1 }}
-            ></motion.div>
+            />
           )}
         </button>
-
       </div>
 
       {/* Player hands */}
       {players.map((player, i) => {
         const isCurrent = player.id === currentUserId;
         const pos = getPlayerPosition(i);
+        const inactive = isInactive(player.id);
 
         return (
           <motion.div
@@ -169,10 +182,13 @@ export const GameTable = ({
             style={{ transform: pos.transform }}
           >
             <div
-              className={`text-sm font-semibold px-3 py-1 rounded-full backdrop-blur-sm ${player.id === activePlayerId
-                ? "bg-green-600 text-white"
-                : "bg-black/40 text-white/90"
-                }`}
+              className={`text-sm font-semibold px-3 py-1 rounded-full backdrop-blur-sm transition-colors ${
+                inactive
+                  ? "bg-red-600/70 text-white" // Disconnected style
+                  : player.id === activePlayerId
+                  ? "bg-green-600 text-white"
+                  : "bg-black/40 text-white/90"
+              }`}
             >
               {isCurrent ? "You" : player.nickname}
             </div>
@@ -192,7 +208,9 @@ export const GameTable = ({
                 return (
                   <motion.div
                     key={card.room_card_id}
-                    className="absolute top-0 cursor-pointer"
+                    className={`absolute top-0 cursor-pointer ${
+                      inactive ? "opacity-50" : ""
+                    }`}
                     style={{ left: offsetX }}
                     animate={
                       selectedCard === index && isCurrent
@@ -219,7 +237,6 @@ export const GameTable = ({
           </motion.div>
         );
       })}
-
     </div>
   );
 };

@@ -27,7 +27,7 @@ export default function Game() {
   const {
     loading,
     started,
-    isHost,
+    hostId,
     activePlayerId,
     currentSide,
     currentCard,
@@ -210,7 +210,7 @@ export default function Game() {
             currentSide={currentSide}
           />
 
-          {isHost && (
+          {hostId === session.user.id && (
             <div className="pt-4 text-center">
               <button
                 onClick={handleStartGame}
@@ -284,6 +284,7 @@ export default function Game() {
         isDarkSide={currentSide === "dark"}
         onCardPlay={(card) => handlePlayCard(card)}
         onDrawCard={handleDrawCard}
+        roomCode={roomCode}
       />
     </div>
   );
