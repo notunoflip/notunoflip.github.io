@@ -10,7 +10,7 @@ export function useRoomRealtime(roomCode?: string) {
   const [loading, setLoading] = useState(true);
   const [started, setStarted] = useState(false);
   const [currentCard, setCurrentCard] = useState<VisibleCard | null>(null);
-  
+
   // Use ref to track current room state without causing re-renders
   const roomRef = useRef<any>(null);
   const startedRef = useRef(false);
@@ -180,6 +180,8 @@ export function useRoomRealtime(roomCode?: string) {
         data.winner_id !== currentRoom.winner_id;
 
       if (shouldUpdate) {
+        await fetchCard(data.current_card, data);
+
         setRoom(data);
       }
     };
@@ -187,7 +189,7 @@ export function useRoomRealtime(roomCode?: string) {
     // Run immediately, then every 10 seconds
     tick();
     const interval = setInterval(tick, 10_000);
-    
+
     return () => clearInterval(interval);
   }, [roomCode]);
 

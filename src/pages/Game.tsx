@@ -234,6 +234,7 @@ export default function Game() {
           setShowWildModal(false);
           setPendingWildCard(null);
         }}
+        backdrop="blur"
       >
         <h2 className="text-xl font-bold text-center mb-4">Choose a Color</h2>
 

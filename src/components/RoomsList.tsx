@@ -143,6 +143,7 @@ export default function RoomsList() {
                 code, 
                 started_game, 
                 created_at,
+                
                 room_players(count)
               `)
               .eq("id", roomId)
@@ -154,6 +155,7 @@ export default function RoomsList() {
                 code: data.code,
                 started_game: data.started_game,
                 created_at: data.created_at,
+                // nickname host_id(nickname),
                 player_count: (data as any).room_players[0]?.count || 0,
               };
 
@@ -183,7 +185,7 @@ export default function RoomsList() {
 
   return (
     <div className="py-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {rooms.map((r) => (
           <div
             key={r.id}

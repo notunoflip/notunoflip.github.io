@@ -5,13 +5,18 @@ interface ModalProps {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  backdrop?: "image" | "blur";
 }
 
-export default function Modal({ open, onClose, children }: ModalProps) {
+export default function Modal({ open, onClose, children, backdrop = "image" }: ModalProps) {
   if (!open) return null;
 
+  const backdropClass = backdrop === "image" 
+    ? "bg-[url('/loading_1.png')] bg-cover bg-center"
+    : "bg-black/50";
+
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50">
+    <div className={`fixed inset-0 flex items-center justify-center z-50 ${backdropClass}`}>
       <div className="relative text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg w-full max-w-md">
         {/* Close button */}
         <button
@@ -21,7 +26,6 @@ export default function Modal({ open, onClose, children }: ModalProps) {
         >
           <X size={18} />
         </button>
-
         {/* Modal content */}
         {children}
       </div>
