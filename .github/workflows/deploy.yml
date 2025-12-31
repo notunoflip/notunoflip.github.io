@@ -8,12 +8,13 @@ jobs:
   build-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
         with:
-          node-version: 18
-
+          node-version: 22
+          cache: 'npm'
+      
       - name: Debug environment variables
         run: |
           echo "URL: $VITE_SUPABASE_URL"
@@ -21,24 +22,24 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-
+      
       - name: Install deps
         run: npm ci
-
+      
       - name: Build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
-
+      
       - name: Copy index.html to 404.html
         run: cp ./dist/index.html ./dist/404.html
-
+      
       - name: Add CNAME file
         run: echo "unoflip.site" > ./dist/CNAME
-
+      
       - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
