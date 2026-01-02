@@ -32,6 +32,7 @@ export default function Game() {
     currentSide,
     currentCard,
     winner,
+    drawStack,
     roomId
   } = useRoomRealtime(roomCode);
 
@@ -285,6 +286,7 @@ export default function Game() {
         isDarkSide={currentSide === "dark"}
         onCardPlay={(card) => handlePlayCard(card)}
         onDrawCard={handleDrawCard}
+        drawStack={drawStack}
         roomCode={roomCode}
       />
     </div>

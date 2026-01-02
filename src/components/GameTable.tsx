@@ -9,6 +9,7 @@ interface GameTableProps {
   currentUserId: string;
   currentCard?: VisibleCard | null;
   drawCardTop?: VisibleCard | null;
+  drawStack?: number;
   activePlayerId?: string;
   isDarkSide?: boolean;
   roomCode?: string;
@@ -25,6 +26,7 @@ export const GameTable = ({
   activePlayerId,
   isDarkSide = false,
   roomCode,
+  drawStack = 0,
   onCardPlay,
   onDrawCard,
 }: GameTableProps) => {
@@ -125,11 +127,10 @@ export const GameTable = ({
         <button
           onClick={() => isYourTurn && onDrawCard?.()}
           disabled={!isYourTurn}
-          className={`relative group transition-transform ${
-            isYourTurn
-              ? "hover:scale-105"
-              : "opacity-40 cursor-not-allowed"
-          }`}
+          className={`relative group transition-transform ${isYourTurn
+            ? "hover:scale-105"
+            : "opacity-40 cursor-not-allowed"
+            }`}
         >
           {/* Another layer */}
           <div
@@ -138,6 +139,31 @@ export const GameTable = ({
           />
 
           {/* Main top card */}
+          {drawStack > 0 && (
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{
+                scale: Math.min(1 + drawStack * 0.05, 1.6),
+                opacity: 1,
+              }}
+              transition={{ type: "spring", stiffness: 300 }}
+              className={`
+      absolute -top-3 -right-3 z-20
+      rounded-full px-3 py-1
+      font-extrabold text-white
+      shadow-lg
+      ${drawStack >= 6
+                  ? "bg-red-600 animate-pulse"
+                  : drawStack >= 3
+                    ? "bg-amber-500"
+                    : "bg-slate-700"
+                }
+    `}
+            >
+              +{drawStack}
+            </motion.div>
+          )}
+
           <Card
             lightColor={drawCardTop?.light.color ?? "blue"}
             lightValue={drawCardTop?.light.value ?? "7"}
@@ -176,24 +202,21 @@ export const GameTable = ({
         const inactive = isInactive(player.id);
 
         return (
+
           <motion.div
             key={player.id}
             className="absolute flex flex-col items-center gap-2"
             style={{ transform: pos.transform }}
           >
             <div
-              className={`text-sm font-semibold px-3 py-1 rounded-full backdrop-blur-sm transition-colors ${
-                inactive
-                  ? "bg-red-600/70 text-white" // Disconnected style
-                  : player.id === activePlayerId
-                  ? "bg-green-600 text-white"
-                  : "bg-black/40 text-white/90"
-              }`}
+              className="relative h-32 w-full flex justify-center mt-2"
+              style={{
+                transform: `rotate(${
+                  ((i - currentIndex + numPlayers) % numPlayers) * angleStep
+                  }deg)`,
+              }}
             >
-              {isCurrent ? "You" : player.nickname}
-            </div>
 
-            <div className="relative h-32 w-full flex justify-center mt-2">
               {player.cards.map((card, index) => {
                 const { light, dark } = card.visible_card ?? {
                   light: { color: null, value: null },
@@ -208,9 +231,8 @@ export const GameTable = ({
                 return (
                   <motion.div
                     key={card.room_card_id}
-                    className={`absolute top-0 cursor-pointer ${
-                      inactive ? "opacity-50" : ""
-                    }`}
+                    className={`absolute top-0 cursor-pointer ${inactive ? "opacity-50" : ""
+                      }`}
                     style={{ left: offsetX }}
                     animate={
                       selectedCard === index && isCurrent
@@ -233,6 +255,16 @@ export const GameTable = ({
                   </motion.div>
                 );
               })}
+            </div>
+            <div
+              className={`text-sm font-semibold px-3 py-1 rounded-full backdrop-blur-sm transition-colors ${inactive
+                ? "bg-red-600/70 text-white" // Disconnected style
+                : player.id === activePlayerId
+                  ? "bg-green-600 text-white"
+                  : "bg-black/40 text-white/90"
+                }`}
+            >
+              {isCurrent ? "You" : player.nickname}
             </div>
           </motion.div>
         );
