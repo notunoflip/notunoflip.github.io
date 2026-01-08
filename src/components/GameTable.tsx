@@ -110,9 +110,9 @@ export const GameTable = ({
   };
 
   return (
-    <div className="relative w-full h-[80vh] flex items-center justify-center">
+    <div className="relative w-full h-[95vh] flex items-center justify-center">
       {/* Center piles */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-4">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-3">
         {currentCard && (
           <Card
             lightColor={currentCard.light.color ?? "black"}
@@ -205,14 +205,16 @@ export const GameTable = ({
 
           <motion.div
             key={player.id}
-            className="absolute flex flex-col items-center gap-2"
-            style={{ transform: pos.transform }}
+            className="absolute flex flex-col items-center gap-1"
+            style={{
+              transform: `${pos.transform} scale(${isCurrent ? 1.2 : 1})`,
+            }}
           >
+
             <div
               className="relative h-32 w-full flex justify-center mt-2"
               style={{
-                transform: `rotate(${
-                  ((i - currentIndex + numPlayers) % numPlayers) * angleStep
+                transform: `rotate(${((i - currentIndex + numPlayers) % numPlayers) * angleStep
                   }deg)`,
               }}
             >
