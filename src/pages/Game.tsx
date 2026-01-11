@@ -33,6 +33,7 @@ export default function Game() {
     currentCard,
     winner,
     drawStack,
+    direction,
     roomId
   } = useRoomRealtime(roomCode);
 
@@ -50,7 +51,7 @@ export default function Game() {
       const { data: sessionData, error: sessionErr } = await fetchSession();
       if (sessionErr || !sessionData?.session) throw new Error("No active session");
 
-      console.log(roomId)
+      // console.log(roomId)
       toast.info("Starting game...");
       const res = await fetch(`${LOCAL_EDGE_URL}/start-game`, {
         method: "POST",
@@ -287,6 +288,7 @@ export default function Game() {
         onCardPlay={(card) => handlePlayCard(card)}
         onDrawCard={handleDrawCard}
         drawStack={drawStack}
+        direction={direction}
         roomCode={roomCode}
       />
     </div>

@@ -13,6 +13,7 @@ interface GameTableProps {
   activePlayerId?: string;
   isDarkSide?: boolean;
   roomCode?: string;
+  direction?: string;
 
   onCardPlay?: (card: PlayerCard) => void;
   onDrawCard?: () => void;
@@ -26,6 +27,7 @@ export const GameTable = ({
   activePlayerId,
   isDarkSide = false,
   roomCode,
+  direction,
   drawStack = 0,
   onCardPlay,
   onDrawCard,
@@ -33,7 +35,10 @@ export const GameTable = ({
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
   const { players: playersPresence } = useRoomPlayers(roomCode || "");
   const isYourTurn = activePlayerId === currentUserId;
-  const clickTimeouts = useRef<Record<string, NodeJS.Timeout | null>>({});
+  const clickTimeouts = useRef<
+    Record<string, ReturnType<typeof setTimeout> | null>
+  >({});
+
 
   // Helper to check if player is inactive
   const isInactive = (playerId: string) => {
@@ -71,17 +76,91 @@ export const GameTable = ({
 
   const currentIndex = players.findIndex((p) => p.id === currentUserId);
   const numPlayers = players.length || 1;
-  const angleStep = 360 / numPlayers;
+  // const angleStep = 360 / numPlayers;
 
-  const getPlayerPosition = (index: number) => {
-    const relativeIndex = (index - currentIndex + numPlayers) % numPlayers;
-    const angle = relativeIndex * angleStep + 90;
-    const radius = 250;
-    const rad = (angle * Math.PI) / 180;
-    const x = radius * Math.cos(rad);
-    const y = radius * Math.sin(rad);
-    return { transform: `translate(${x}px, ${y}px)` };
+  // const getPlayerPosition = (index: number) => {
+  //   const relativeIndex = (index - currentIndex + numPlayers) % numPlayers;
+  //   const angle = relativeIndex * angleStep + 90;
+  //   const radius = 250;
+  //   const rad = (angle * Math.PI) / 180;
+  //   const x = radius * Math.cos(rad);
+  //   const y = radius * Math.sin(rad);
+  //   return { transform: `translate(${x}px, ${y}px)` };
+  // };
+
+  type Seat = {
+    x: (w: number, h: number, m: number) => number;
+    y: (w: number, h: number, m: number) => number;
+    rotation: 0 | 90 | 180 | 270;
   };
+
+  const SEATS = {
+    bottom: { x: (w) => w / 2, y: (_, h, m) => h - m + 50, rotation: 0 },
+    bottom1: { x: (w) => w * 0.25, y: (_, h, m) => h - m + 50, rotation: 0 },
+    bottom2: { x: (w) => w * 0.75, y: (_, h, m) => h - m + 50, rotation: 0 },
+
+    left: { x: (_, __, m) => m - 80, y: (_, h) => h / 2, rotation: 90 },
+    left1: { x: (_, __, m) => m - 80, y: (_, h) => h * 0.25, rotation: 90 },
+    left2: { x: (_, __, m) => m - 80, y: (_, h) => h * 0.75, rotation: 90 },
+
+    top: { x: (w) => w / 2, y: (_, __, m) => m - 80, rotation: 180 },
+    top1: { x: (w) => w * 0.25, y: (_, __, m) => m - 80, rotation: 180 },
+    top2: { x: (w) => w * 0.75, y: (_, __, m) => m - 80, rotation: 180 },
+
+    right: { x: (w, __, m) => w - m + 100, y: (_, h) => h / 2, rotation: 270 },
+    right1: { x: (w, __, m) => w - m + 100, y: (_, h) => h * 0.25, rotation: 270 },
+    right2: { x: (w, __, m) => w - m + 100, y: (_, h) => h * 0.75, rotation: 270 },
+  } satisfies Record<string, Seat>;
+
+  const LAYOUTS: Record<number, (keyof typeof SEATS)[]> = {
+    2: ["bottom", "top"],
+    3: ["bottom", "top", "right"],
+    4: ["bottom", "left", "top", "right"],
+    5: ["bottom1", "left", "top1", "top2", "right"],
+    6: ["bottom1", "left1", "left2", "top", "right1", "right2"],
+  };
+
+  const getPlayerPosition = (index: number, isActive: boolean) => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const m = 80;
+
+    const relativeIndex =
+      (index - currentIndex + numPlayers) % numPlayers;
+
+    const seatKey = (LAYOUTS[numPlayers] ?? LAYOUTS[6])[relativeIndex];
+    const seat = SEATS[seatKey];
+
+    let x = seat.x(w, h, m);
+    let y = seat.y(w, h, m);
+
+    if (isActive) {
+      const PULL = 50;
+
+      switch (seatKey[0]) {
+        case "r": // right
+          x -= PULL;
+          break;
+        case "l": // left
+          x += PULL;
+          break;
+        case "t": // top
+          y += PULL;
+          break;
+        case "b": // bottom
+          y -= PULL;
+          break;
+      }
+    }
+    return {
+      translateX: x - w / 2,
+      translateY: y - h / 2,
+      rotation: seat.rotation,
+    };
+  };
+
+
+
 
   const handleCardClick = (
     playerId: string,
@@ -113,6 +192,32 @@ export const GameTable = ({
     <div className="relative w-full h-[95vh] flex items-center justify-center">
       {/* Center piles */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-3">
+        <motion.div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+          animate={{ rotate: direction === "clockwise" ? 360 : -360 }}
+          transition={{ repeat: Infinity, duration: 9, ease: "linear" }}
+          style={{ zIndex: 10, opacity: 0.5 }}
+        >
+          <svg width={300} height={300} viewBox="0 0 200 200">
+            <circle
+              cx="100"
+              cy="100"
+              r="90"
+              stroke="white"
+              strokeWidth="4"
+              fill="none"
+              strokeOpacity={0.2}
+            />
+            <path
+              d={direction === "clockwise"
+                ? "M190,100 L180,95 L180,105 Z"
+                : "M10,100 L20,95 L20,105 Z"}
+              fill="white"
+              opacity={0.2}
+            />
+          </svg>
+        </motion.div>
+
         {currentCard && (
           <Card
             lightColor={currentCard.light.color ?? "black"}
@@ -195,11 +300,14 @@ export const GameTable = ({
         </button>
       </div>
 
+
+
+
       {/* Player hands */}
       {players.map((player, i) => {
         const isCurrent = player.id === currentUserId;
-        const pos = getPlayerPosition(i);
         const inactive = isInactive(player.id);
+        const pos = getPlayerPosition(i, player.id === activePlayerId);
 
         return (
 
@@ -207,15 +315,18 @@ export const GameTable = ({
             key={player.id}
             className="absolute flex flex-col items-center gap-1"
             style={{
-              transform: `${pos.transform} scale(${isCurrent ? 1.2 : 1})`,
+              transform: `
+      translate(${pos.translateX}px, ${pos.translateY}px)
+      scale(${isCurrent ? 1.2 : 1})
+    `,
             }}
+
           >
 
             <div
               className="relative h-32 w-full flex justify-center mt-2"
               style={{
-                transform: `rotate(${((i - currentIndex + numPlayers) % numPlayers) * angleStep
-                  }deg)`,
+                transform: `rotate(${pos.rotation}deg)`,
               }}
             >
 
@@ -257,16 +368,21 @@ export const GameTable = ({
                   </motion.div>
                 );
               })}
-            </div>
-            <div
-              className={`text-sm font-semibold px-3 py-1 rounded-full backdrop-blur-sm transition-colors ${inactive
-                ? "bg-red-600/70 text-white" // Disconnected style
-                : player.id === activePlayerId
-                  ? "bg-green-600 text-white"
-                  : "bg-black/40 text-white/90"
-                }`}
-            >
-              {isCurrent ? "You" : player.nickname}
+              <div
+                className={`
+    text-sm font-semibold 
+    -translate-y-8 px-3 py-1 h-7 rounded-full 
+    backdrop-blur-sm transition-colors z-50
+    ${inactive
+                    ? "bg-red-600/70 text-white"
+                    : player.id === activePlayerId
+                      ? "bg-green-600 text-white"
+                      : "bg-black/40 text-white/90"
+                  }
+  `}
+              >
+                {isCurrent ? "You" : player.nickname}
+              </div>
             </div>
           </motion.div>
         );

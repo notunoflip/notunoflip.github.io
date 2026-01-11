@@ -8,3 +8,9 @@ html {
   transition: background-color 0.3s, color 0.3s;
   font-family: 'Gloria Hallelujah', cursive;
 }
+/* global.css or tailwind.css */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* prevents scrolling & white spaces */
+}

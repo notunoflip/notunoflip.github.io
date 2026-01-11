@@ -16,7 +16,7 @@ export const BackgroundMusic = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isOnBreak, setIsOnBreak] = useState(false);
-  const breakTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const breakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasInteractedRef = useRef(false);
 
   // Initialize audio element
