@@ -1,7 +1,7 @@
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { getFanStyle, type PlayerCard, type VisibleCard } from "../lib/types";
 import { Card } from "./Card";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useRoomPlayers } from "../hooks/useRoomPlayers";
 
 interface GameTableProps {
@@ -14,6 +14,7 @@ interface GameTableProps {
   isDarkSide?: boolean;
   roomCode?: string;
   direction?: string;
+  playerOrder?: string[]; // ✅ ADD
 
   onCardPlay?: (card: PlayerCard) => void;
   onDrawCard?: () => void;
@@ -29,11 +30,14 @@ export const GameTable = ({
   roomCode,
   direction,
   drawStack = 0,
+  playerOrder,
   onCardPlay,
   onDrawCard,
+
 }: GameTableProps) => {
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
   const { players: playersPresence } = useRoomPlayers(roomCode || "");
+  const unoTriggeredRef = useRef<Record<string, boolean>>({});
   const isYourTurn = activePlayerId === currentUserId;
   const clickTimeouts = useRef<
     Record<string, ReturnType<typeof setTimeout> | null>
@@ -68,11 +72,16 @@ export const GameTable = ({
     return acc;
   }, {});
 
-  const players = Object.entries(grouped).map(([ownerId, playerCards]) => ({
-    id: ownerId,
-    nickname: playerCards[0]?.nickname || "Player",
-    cards: playerCards,
+  const orderedPlayerIds =
+    playerOrder?.filter((id) => grouped[id]) ??
+    Object.keys(grouped);
+
+  const players = orderedPlayerIds.map((playerId) => ({
+    id: playerId,
+    nickname: grouped[playerId][0]?.nickname || "Player",
+    cards: grouped[playerId],
   }));
+
 
   const currentIndex = players.findIndex((p) => p.id === currentUserId);
   const numPlayers = players.length || 1;
@@ -308,6 +317,28 @@ export const GameTable = ({
         const isCurrent = player.id === currentUserId;
         const inactive = isInactive(player.id);
         const pos = getPlayerPosition(i, player.id === activePlayerId);
+        const isUno = player.cards.length === 1;
+
+        const [showUnoPop, setShowUnoPop] = useState(false);
+
+        // ✅ Fire UNO pop ONLY on transition to 1 card
+        useEffect(() => {
+          if (
+            isUno &&
+            !unoTriggeredRef.current[player.id]
+          ) {
+            unoTriggeredRef.current[player.id] = true;
+            setShowUnoPop(true);
+
+            const t = setTimeout(() => setShowUnoPop(false), 1500);
+            return () => clearTimeout(t);
+          }
+
+          // Reset if they go above 1 card again
+          if (!isUno) {
+            unoTriggeredRef.current[player.id] = false;
+          }
+        }, [isUno, player.id]);
 
         return (
 
@@ -329,6 +360,27 @@ export const GameTable = ({
                 transform: `rotate(${pos.rotation}deg)`,
               }}
             >
+              <AnimatePresence>
+                {showUnoPop && (
+                  <motion.div
+                    initial={{ scale: 0, y: 20, opacity: 0 }}
+                    animate={{ scale: 1.4, y: -40, opacity: 1 }}
+                    exit={{ scale: 0.8, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 300 }}
+                    className="
+        absolute -top-10
+        text-red-500
+        font-black
+        text-2xl
+        drop-shadow-lg
+        pointer-events-none
+      "
+                  >
+                    UNO!
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
 
               {player.cards.map((card, index) => {
                 const { light, dark } = card.visible_card ?? {

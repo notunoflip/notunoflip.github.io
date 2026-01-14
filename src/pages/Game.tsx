@@ -34,6 +34,7 @@ export default function Game() {
     winner,
     drawStack,
     direction,
+    player_order,
     roomId
   } = useRoomRealtime(roomCode);
 
@@ -290,6 +291,7 @@ export default function Game() {
         drawStack={drawStack}
         direction={direction}
         roomCode={roomCode}
+        playerOrder={player_order} 
       />
     </div>
   );

@@ -212,6 +212,8 @@ export function useRoomRealtime(roomCode?: string) {
     activePlayerId: room?.turn_player_id ?? null,
     direction: room?.direction ?? "clockwise",
 
+    player_order: room?.player_order ?? [],
+
     currentSide: (room?.current_side as CardSide) ?? "light",
     currentCardId: room?.current_card ?? null,
     drawStack: room?.draw_stack ?? 0,
