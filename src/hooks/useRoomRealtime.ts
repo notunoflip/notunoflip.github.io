@@ -116,7 +116,7 @@ export function useRoomRealtime(roomCode?: string) {
           if (!startedRef.current && newRoom.started_game) {
             toast.success("Game started!");
             setStarted(true);
-            window.location.reload();
+            // window.location.reload();
           } else if (startedRef.current && !newRoom.started_game) {
             setStarted(false);
           }
@@ -186,7 +186,7 @@ export function useRoomRealtime(roomCode?: string) {
     };
 
     tick();
-    const interval = setInterval(tick, 30_000);
+    const interval = setInterval(tick, 5_000);
 
     return () => clearInterval(interval);
   }, [roomCode]);
