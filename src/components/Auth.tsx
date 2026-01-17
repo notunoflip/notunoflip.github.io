@@ -26,14 +26,20 @@ export default function Auth({ onLogin }: AuthProps) {
     if (step === "code") inputRefs.current[0]?.focus();
   }, [step]);
 
-  function generateGuestUsername() {
-    const num = Math.floor(1000 + Math.random() * 9000);
-    return `guest${num}`;
-  }
+
 
   // -----------------------------
   // Guest login (captcha required)
   // -----------------------------
+  function generateGuestName() {
+    const animals = [
+      "tiger", "zebra", "panda", "koala", "otter", "eagle", "shark", "whale", "hippo", "lemur"
+    ];
+    const animal = animals[Math.floor(Math.random() * animals.length)];
+    const digits = Math.floor(1000 + Math.random() * 9000); // 4 digits
+    return `${animal}${digits}`;
+  }
+
   const handleGuestLogin = async () => {
     // First click: reveal captcha
     if (!showCaptcha) {
@@ -41,7 +47,6 @@ export default function Auth({ onLogin }: AuthProps) {
       return;
     }
 
-    // Captcha not solved yet
     if (!captchaToken) {
       toast.error("Please complete the captcha.");
       return;
@@ -49,24 +54,52 @@ export default function Auth({ onLogin }: AuthProps) {
 
     setLoading(true);
 
-    const username = generateGuestUsername();
+    // Try upserting guest name up to 3 times
+    let guestName = "";
+    let success = false;
 
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      guestName = generateGuestName();
+
+      const { error } = await supabase
+        .from("players")
+        .upsert(
+          {
+            id: "guest-" + crypto.randomUUID(), // use unique ID per guest session
+            nickname: guestName,
+            is_guest: true,
+          },
+          { onConflict: "nickname" } // conflict on nickname
+        )
+        .select("*")
+        .single();
+
+      if (!error) {
+        success = true;
+        break;
+      }
+    }
+
+    setLoading(false);
+    setShowCaptcha(false);
+    setCaptchaToken(null);
+    captchaRef.current?.resetCaptcha();
+
+    if (!success) {
+      toast.error("Could not generate unique guest name. Try again later.");
+      return;
+    }
+
+    // Log in anonymously using Supabase auth
     const { data, error } = await supabase.auth.signInAnonymously({
       options: {
         captchaToken,
         data: {
-          username,
+          username: guestName,
           is_guest: true,
         },
       },
     });
-
-    setLoading(false);
-
-    // Cleanup captcha state
-    setShowCaptcha(false);
-    setCaptchaToken(null);
-    captchaRef.current?.resetCaptcha();
 
     if (error) {
       toast.error(`Guest login failed: ${error.message}`);
@@ -78,9 +111,10 @@ export default function Auth({ onLogin }: AuthProps) {
       return;
     }
 
-    toast.success(`Logged in as ${username}`);
+    toast.success(`Logged in as ${guestName}`);
     onLogin(data.session);
   };
+
 
   // -----------------------------
   // Magic link (NO captcha)
