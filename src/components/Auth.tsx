@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { Mail, ArrowLeft, Loader2 } from "lucide-react";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 
 interface AuthProps {
   onLogin: (session: Session) => void;
@@ -13,6 +14,12 @@ export default function Auth({ onLogin }: AuthProps) {
   const [userEmail, setUserEmail] = useState("");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
+
+  // hCaptcha (guest only)
+  const [showCaptcha, setShowCaptcha] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<HCaptcha>(null);
+
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
@@ -20,17 +27,33 @@ export default function Auth({ onLogin }: AuthProps) {
   }, [step]);
 
   function generateGuestUsername() {
-    const num = Math.floor(1000 + Math.random() * 9000); // 4 digits
+    const num = Math.floor(1000 + Math.random() * 9000);
     return `guest${num}`;
   }
 
+  // -----------------------------
+  // Guest login (captcha required)
+  // -----------------------------
   const handleGuestLogin = async () => {
+    // First click: reveal captcha
+    if (!showCaptcha) {
+      setShowCaptcha(true);
+      return;
+    }
+
+    // Captcha not solved yet
+    if (!captchaToken) {
+      toast.error("Please complete the captcha.");
+      return;
+    }
+
     setLoading(true);
 
     const username = generateGuestUsername();
 
     const { data, error } = await supabase.auth.signInAnonymously({
       options: {
+        captchaToken,
         data: {
           username,
           is_guest: true,
@@ -39,6 +62,11 @@ export default function Auth({ onLogin }: AuthProps) {
     });
 
     setLoading(false);
+
+    // Cleanup captcha state
+    setShowCaptcha(false);
+    setCaptchaToken(null);
+    captchaRef.current?.resetCaptcha();
 
     if (error) {
       toast.error(`Guest login failed: ${error.message}`);
@@ -54,16 +82,21 @@ export default function Auth({ onLogin }: AuthProps) {
     onLogin(data.session);
   };
 
-
-  // Request magic link
+  // -----------------------------
+  // Magic link (NO captcha)
+  // -----------------------------
   const handleMagicLinkLogin = async () => {
     if (!userEmail) return toast.error("Please enter your email.");
 
     setLoading(true);
+
     const { error } = await supabase.auth.signInWithOtp({
       email: userEmail,
-      options: { emailRedirectTo: window.location.origin },
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
     });
+
     setLoading(false);
 
     if (error) {
@@ -74,16 +107,20 @@ export default function Auth({ onLogin }: AuthProps) {
     }
   };
 
-  // Verify OTP
+  // -----------------------------
+  // OTP verify (NO captcha)
+  // -----------------------------
   const handleCodeLogin = async (code: string) => {
     if (!userEmail || !code) return toast.error("Enter email and code.");
 
     setLoading(true);
+
     const { data, error } = await supabase.auth.verifyOtp({
       email: userEmail,
       token: code,
       type: "magiclink",
     });
+
     setLoading(false);
 
     if (error) {
@@ -93,11 +130,13 @@ export default function Auth({ onLogin }: AuthProps) {
       return;
     }
 
-    const session = data.session;
-    if (!session) return toast.error("Missing session data.");
+    if (!data.session) {
+      toast.error("Missing session data.");
+      return;
+    }
 
     toast.success(`Logged in as ${userEmail}`);
-    onLogin(session);
+    onLogin(data.session);
   };
 
   const handleOtpChange = (index: number, value: string) => {
@@ -139,11 +178,6 @@ export default function Auth({ onLogin }: AuthProps) {
         <h2 className="text-xl font-semibold">
           {step === "email" ? "Sign in" : "Check your email"}
         </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {step === "email"
-            ? "We'll send you a magic link"
-            : `Enter the code sent to ${userEmail}`}
-        </p>
       </div>
 
       {/* Email Step */}
@@ -158,10 +192,11 @@ export default function Auth({ onLogin }: AuthProps) {
             className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
             disabled={loading}
           />
+
           <button
             onClick={handleMagicLinkLogin}
             disabled={loading}
-            className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-600 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full bg-green-600 text-white py-2 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {loading ? (
               <>
@@ -179,27 +214,22 @@ export default function Auth({ onLogin }: AuthProps) {
             <div className="flex-grow border-t border-gray-300 dark:border-gray-600" />
           </div>
 
-          <button
-            onClick={handleGuestLogin}
-            disabled={loading}
-            className="w-full border border-gray-300 dark:border-gray-600 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-          >
-            Continue as Guest
-          </button>
-          <div className="relative flex items-center py-2">
-            <div className="flex-grow border-t border-gray-300 dark:border-gray-600" />
-            <span className="mx-3 text-xs text-gray-400">OR</span>
-            <div className="flex-grow border-t border-gray-300 dark:border-gray-600" />
-          </div>
+          {/* hCaptcha ONLY for guest */}
+          {showCaptcha && (
+            <HCaptcha
+              sitekey="d97cddc0-2708-4c8e-aebc-331a7f40b972"
+              onVerify={setCaptchaToken}
+              ref={captchaRef}
+            />
+          )}
 
           <button
             onClick={handleGuestLogin}
             disabled={loading}
             className="w-full border border-gray-300 dark:border-gray-600 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
           >
-            Continue as Guest
+            {showCaptcha ? "Verify to Continue as Guest" : "Continue as Guest"}
           </button>
-
         </div>
       )}
 
@@ -211,7 +241,7 @@ export default function Auth({ onLogin }: AuthProps) {
               setStep("email");
               setOtp(["", "", "", "", "", ""]);
             }}
-            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
           >
             <ArrowLeft className="w-4 h-4" />
             Change email
@@ -224,32 +254,23 @@ export default function Auth({ onLogin }: AuthProps) {
                 ref={(el) => {
                   inputRefs.current[i] = el;
                 }}
+
                 type="text"
                 inputMode="numeric"
                 maxLength={1}
                 value={digit}
                 onChange={(e) => handleOtpChange(i, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(i, e)}
-                disabled={loading}
-                className="w-full h-12 text-center text-xl font-semibold border-2 rounded-lg focus:border-green-500 dark:bg-gray-700 dark:border-gray-600 disabled:opacity-50"
+                className="w-full h-12 text-center text-xl font-semibold border rounded-lg dark:bg-gray-700 dark:border-gray-600"
               />
             ))}
           </div>
 
           {loading && (
-            <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+            <div className="flex justify-center text-sm text-gray-500">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Verifying...
             </div>
           )}
-
-          <button
-            onClick={handleMagicLinkLogin}
-            disabled={loading}
-            className="w-full text-sm text-green-700 hover:text-green-600 disabled:opacity-50"
-          >
-            Resend code
-          </button>
         </div>
       )}
     </div>
