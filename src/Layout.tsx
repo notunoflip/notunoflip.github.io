@@ -53,7 +53,7 @@ export default function Layout() {
   return (
     <div className="flex flex-col min-h-screen">
       {/* Global toast container */}
-      <Sonner richColors position="bottom-right" />
+      <Sonner richColors position="top-right" />
 
       {/* Header is always on top */}
       <Header session={session} onLogout={handleLogout} onSettings={function (): void {

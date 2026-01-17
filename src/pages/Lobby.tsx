@@ -209,7 +209,7 @@ export default function Lobby() {
       </main>
 
       {/* Auth modal */}
-      <Modal open={authOpen} onClose={() => setAuthOpen(false)}>
+      <Modal open={authOpen} onClose={() => setAuthOpen(false)} closeable={false}>
         <Auth
           onLogin={setSession}
         />

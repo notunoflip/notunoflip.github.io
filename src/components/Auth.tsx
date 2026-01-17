@@ -19,10 +19,46 @@ export default function Auth({ onLogin }: AuthProps) {
     if (step === "code") inputRefs.current[0]?.focus();
   }, [step]);
 
+  function generateGuestUsername() {
+    const num = Math.floor(1000 + Math.random() * 9000); // 4 digits
+    return `guest${num}`;
+  }
+
+  const handleGuestLogin = async () => {
+    setLoading(true);
+
+    const username = generateGuestUsername();
+
+    const { data, error } = await supabase.auth.signInAnonymously({
+      options: {
+        data: {
+          username,
+          is_guest: true,
+        },
+      },
+    });
+
+    setLoading(false);
+
+    if (error) {
+      toast.error(`Guest login failed: ${error.message}`);
+      return;
+    }
+
+    if (!data.session) {
+      toast.error("No session returned.");
+      return;
+    }
+
+    toast.success(`Logged in as ${username}`);
+    onLogin(data.session);
+  };
+
+
   // Request magic link
   const handleMagicLinkLogin = async () => {
     if (!userEmail) return toast.error("Please enter your email.");
-    
+
     setLoading(true);
     const { error } = await supabase.auth.signInWithOtp({
       email: userEmail,
@@ -41,7 +77,7 @@ export default function Auth({ onLogin }: AuthProps) {
   // Verify OTP
   const handleCodeLogin = async (code: string) => {
     if (!userEmail || !code) return toast.error("Enter email and code.");
-    
+
     setLoading(true);
     const { data, error } = await supabase.auth.verifyOtp({
       email: userEmail,
@@ -59,7 +95,7 @@ export default function Auth({ onLogin }: AuthProps) {
 
     const session = data.session;
     if (!session) return toast.error("Missing session data.");
-    
+
     toast.success(`Logged in as ${userEmail}`);
     onLogin(session);
   };
@@ -85,10 +121,10 @@ export default function Auth({ onLogin }: AuthProps) {
     e.preventDefault();
     const paste = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
     const newOtp = [...otp];
-    
+
     for (let i = 0; i < paste.length; i++) newOtp[i] = paste[i];
     setOtp(newOtp);
-    
+
     if (paste.length === 6) handleCodeLogin(paste);
     else inputRefs.current[Math.min(paste.length, 5)]?.focus();
   };
@@ -104,8 +140,8 @@ export default function Auth({ onLogin }: AuthProps) {
           {step === "email" ? "Sign in" : "Check your email"}
         </h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          {step === "email" 
-            ? "We'll send you a magic link" 
+          {step === "email"
+            ? "We'll send you a magic link"
             : `Enter the code sent to ${userEmail}`}
         </p>
       </div>
@@ -136,6 +172,34 @@ export default function Auth({ onLogin }: AuthProps) {
               "Send Magic Link"
             )}
           </button>
+
+          <div className="relative flex items-center py-2">
+            <div className="flex-grow border-t border-gray-300 dark:border-gray-600" />
+            <span className="mx-3 text-xs text-gray-400">OR</span>
+            <div className="flex-grow border-t border-gray-300 dark:border-gray-600" />
+          </div>
+
+          <button
+            onClick={handleGuestLogin}
+            disabled={loading}
+            className="w-full border border-gray-300 dark:border-gray-600 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            Continue as Guest
+          </button>
+          <div className="relative flex items-center py-2">
+            <div className="flex-grow border-t border-gray-300 dark:border-gray-600" />
+            <span className="mx-3 text-xs text-gray-400">OR</span>
+            <div className="flex-grow border-t border-gray-300 dark:border-gray-600" />
+          </div>
+
+          <button
+            onClick={handleGuestLogin}
+            disabled={loading}
+            className="w-full border border-gray-300 dark:border-gray-600 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            Continue as Guest
+          </button>
+
         </div>
       )}
 
