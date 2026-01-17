@@ -67,7 +67,10 @@ export function PlayerHand({
         transform: `translate(${position.translateX}px, ${position.translateY}px) scale(${isCurrent ? 1.2 : 1})`,
       }}
     >
-      <div className="relative h-32 w-full flex justify-center mt-2" style={{ transform: `rotate(${position.rotation}deg)` }}>
+      <div
+        className="h-32 mt-2"
+        style={{ transform: `rotate(${position.rotation}deg)` }}
+      >
         <AnimatePresence>
           {showUnoPop && (
             <motion.div
@@ -82,41 +85,49 @@ export function PlayerHand({
           )}
         </AnimatePresence>
 
-        {player.cards.map((card, index) => {
-          const { light, dark } = card.visible_card ?? {
-            light: { color: null, value: null },
-            dark: { color: null, value: null },
-          };
+        {/* Draggable fanned row */}
+        <motion.div
+          className="relative flex items-start cursor-grab w-full"
+          drag="x"
+          dragConstraints={{ left: -Math.max(player.cards.length * 30 - 200, 0), right: 0 }} // simple drag limit
+        >
+          {player.cards.map((card, index) => {
+            const { light, dark } = card.visible_card ?? {
+              light: { color: null, value: null },
+              dark: { color: null, value: null },
+            };
 
-          const { rotation, offsetX } = getFanStyle(index, player.cards.length);
-          const isSelected = selectedCardId === card.room_card_id;
+            const { rotation, offsetX } = getFanStyle(index, player.cards.length);
+            const isSelected = selectedCardId === card.room_card_id;
 
-          return (
-            <motion.div
-              key={card.room_card_id}
-              className={`absolute top-0 cursor-pointer ${inactive ? "opacity-50" : ""}`}
-              style={{ left: offsetX }}
-              animate={isSelected ? { scale: 1.1, y: -20, zIndex: 10 } : { scale: 1, y: 0, zIndex: 1 }}
-              onClick={() => handleCardClick(index, card)}
-            >
-              <Card
-                lightColor={light.color ?? "red"}
-                lightValue={light.value ?? "0"}
-                darkColor={dark.color ?? "blue"}
-                darkValue={dark.value ?? "flip"}
-                isFlipped={false}
-                showBothSides={isCurrent}
-                isDarkSide={isDarkSide}
-                isHoverable={false}
-                rotation={rotation}
-              />
-            </motion.div>
-          );
-        })}
+            return (
+              <motion.div
+                key={card.room_card_id}
+                className={`absolute top-0 cursor-pointer ${inactive ? "opacity-50" : ""}`}
+                style={{ left: offsetX, zIndex: isCurrent ? 50 : 10 }}
+                animate={isSelected ? { scale: 1.1, y: -20, zIndex: 10 } : { scale: 1, y: 0, zIndex: 1 }}
+                onClick={() => handleCardClick(index, card)}
+              >
+                <Card
+                  lightColor={light.color ?? "red"}
+                  lightValue={light.value ?? "0"}
+                  darkColor={dark.color ?? "blue"}
+                  darkValue={dark.value ?? "flip"}
+                  isFlipped={false}
+                  showBothSides={isCurrent}
+                  isDarkSide={isDarkSide}
+                  isHoverable={false}
+                  rotation={rotation}
+                />
+              </motion.div>
+            );
+          })}
+        </motion.div>
 
-        <div className={`text-sm font-semibold -translate-y-8 px-3 py-1 h-7 rounded-full backdrop-blur-sm transition-colors z-50 ${
-          inactive ? "bg-red-600/70 text-white" : isActive ? "bg-green-600 text-white" : "bg-black/40 text-white/90"
-        }`}>
+        <div
+          className={`text-sm font-semibold -translate-y-8 px-3 py-1 h-7 rounded-full backdrop-blur-sm transition-colors z-50 ${inactive ? "bg-red-600/70 text-white" : isActive ? "bg-green-600 text-white" : "bg-black/40 text-white/90"
+            }`}
+        >
           {isCurrent ? "You" : player.nickname}
         </div>
       </div>

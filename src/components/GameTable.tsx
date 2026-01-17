@@ -98,12 +98,25 @@ export const GameTable = ({
 		right2: { x: (w, __, m) => w - m + 100, y: (_, h) => h * 0.75, rotation: 270 },
 	} satisfies Record<string, Seat>;
 
-	const LAYOUTS: Record<number, (keyof typeof SEATS)[]> = {
-		2: ["bottom", "top"],
-		3: ["bottom", "top", "right"],
-		4: ["bottom", "left", "top", "right"],
-		5: ["bottom1", "left", "top1", "top2", "right"],
-		6: ["bottom1", "left1", "left2", "top", "right1", "right2"],
+	const getLayout = (numPlayers: number) => {
+		const w = window.innerWidth;
+		const h = window.innerHeight;
+
+		if (numPlayers === 5) {
+			if (h > w) return ["bottom1", "left1", "left2", "right1", "right2"];
+			return ["bottom1", "top1", "top2", "left1", "right1"];
+		}
+
+		if (numPlayers === 6) {
+			if (h > w) return ["bottom1", "left1", "left2", "right1", "right2", "top1"];
+			return ["bottom1", "top1", "top2", "left1", "left2", "right1"];
+		}
+
+		return {
+			2: ["bottom", "top"],
+			3: ["bottom", "top", "right"],
+			4: ["bottom", "left", "top", "right"],
+		}[numPlayers] ?? ["bottom", "left", "top", "right", "left1", "right1"];
 	};
 
 	const getPlayerPosition = (index: number, isActive: boolean) => {
@@ -112,9 +125,10 @@ export const GameTable = ({
 		const m = 80;
 
 		const relativeIndex = (index - currentIndex + numPlayers) % numPlayers;
-		const seatKey = (LAYOUTS[numPlayers] ?? LAYOUTS[6])[relativeIndex];
-		const seat = SEATS[seatKey];
-
+		const layout = getLayout(numPlayers);
+		const seatKey = layout[relativeIndex];
+		const seat = SEATS[seatKey as keyof typeof SEATS];
+		
 		let x = seat.x(w, h, m);
 		let y = seat.y(w, h, m);
 
