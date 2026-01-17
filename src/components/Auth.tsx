@@ -86,7 +86,7 @@ export default function Auth({ onLogin }: AuthProps) {
     captchaRef.current?.resetCaptcha();
 
     if (!success) {
-      toast.error("Could not generate unique guest name. Try again later.");
+      toast.error("Try again later.");
       return;
     }
 
