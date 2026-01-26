@@ -242,10 +242,11 @@ export default function RoomsList() {
 
             {r.started_game && (
               <button
-                disabled
-                className="w-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 py-2.5 rounded-lg font-medium cursor-not-allowed"
+                onClick={() => navigate(`/room/${r.code}`)}
+                className="w-full bg-gray-100 hover:bg-green-600 text-white py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
               >
-                Game in Progress
+                Spectate
+                <ArrowRight className="w-4 h-4" />
               </button>
             )}
           </div>

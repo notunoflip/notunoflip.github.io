@@ -86,7 +86,7 @@ export default function Auth({ onLogin }: AuthProps) {
     captchaRef.current?.resetCaptcha();
 
     if (!success) {
-      toast.error("Try again later.");
+      toast.error("Try Magic Link instead");
       return;
     }
 
