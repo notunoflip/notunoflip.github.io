@@ -15,11 +15,8 @@ export default function Auth({ onLogin }: AuthProps) {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
 
-  // Invisible hCaptcha
-  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const captchaRef = useRef<HCaptcha>(null);
-
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   useEffect(() => {
     if (step === "code") inputRefs.current[0]?.focus();
@@ -28,21 +25,24 @@ export default function Auth({ onLogin }: AuthProps) {
   // -----------------------------------
   // Utilities
   // -----------------------------------
-  const runCaptcha = async () => {
-    setCaptchaToken(null);
+  const runCaptcha = async (): Promise<string | null> => {
     console.log("[Captcha] executing...");
-    const token = await captchaRef.current?.execute();
-    console.log("[Captcha] token received:", token);
-    setCaptchaToken(token ?? null);
+    try {
+      const token = await captchaRef.current?.execute();
+      console.log("[Captcha] token received:", token);
+      return token ?? null;
+    } catch (err) {
+      console.error("[Captcha] execution error:", err);
+      return null;
+    }
   };
 
   const resetCaptcha = () => {
     console.log("[Captcha] resetting");
     captchaRef.current?.resetCaptcha();
-    setCaptchaToken(null);
   };
 
-  function generateGuestName() {
+  const generateGuestName = () => {
     const animals = [
       "tiger", "zebra", "panda", "koala", "otter",
       "eagle", "shark", "whale", "hippo", "lemur",
@@ -50,21 +50,19 @@ export default function Auth({ onLogin }: AuthProps) {
     const animal = animals[Math.floor(Math.random() * animals.length)];
     const digits = Math.floor(1000 + Math.random() * 9000);
     return `${animal}${digits}`;
-  }
+  };
 
   // -----------------------------------
-  // Guest Login (captcha required)
+  // Guest Login
   // -----------------------------------
   const handleGuestLogin = async () => {
-    await runCaptcha();
-    if (!captchaToken) {
-      console.log("[Guest Login] captchaToken missing");
+    const token = await runCaptcha();
+    if (!token) {
       toast.error("Captcha verification failed.");
       return;
     }
 
-    console.log("[Guest Login] captchaToken before Supabase:", captchaToken);
-
+    console.log("[Guest Login] captchaToken:", token);
     setLoading(true);
 
     let guestName = "";
@@ -76,11 +74,7 @@ export default function Auth({ onLogin }: AuthProps) {
       const { error } = await supabase
         .from("players")
         .upsert(
-          {
-            id: "guest-" + crypto.randomUUID(),
-            nickname: guestName,
-            is_guest: true,
-          },
+          { id: "guest-" + crypto.randomUUID(), nickname: guestName, is_guest: true },
           { onConflict: "nickname" }
         )
         .select()
@@ -100,18 +94,15 @@ export default function Auth({ onLogin }: AuthProps) {
     }
 
     const { data, error } = await supabase.auth.signInAnonymously({
-      options: {
-        captchaToken,
-        data: { username: guestName, is_guest: true },
-      },
+      options: { captchaToken: token, data: { username: guestName, is_guest: true } },
     });
-
-    console.log("[Guest Login] Supabase response:", { data, error });
 
     setLoading(false);
     resetCaptcha();
 
-    if (error || !data.session) {
+    console.log("[Guest Login] Supabase response:", { data, error });
+
+    if (error || !data?.session) {
       toast.error(error?.message ?? "Guest login failed.");
       return;
     }
@@ -121,7 +112,7 @@ export default function Auth({ onLogin }: AuthProps) {
   };
 
   // -----------------------------------
-  // Magic Link Login (captcha required)
+  // Magic Link Login
   // -----------------------------------
   const handleMagicLinkLogin = async () => {
     if (!userEmail) {
@@ -129,29 +120,24 @@ export default function Auth({ onLogin }: AuthProps) {
       return;
     }
 
-    await runCaptcha();
-    if (!captchaToken) {
-      console.log("[Magic Link] captchaToken missing");
+    const token = await runCaptcha();
+    if (!token) {
       toast.error("Captcha verification failed.");
       return;
     }
 
-    console.log("[Magic Link] captchaToken before Supabase:", captchaToken);
-
+    console.log("[Magic Link] captchaToken:", token);
     setLoading(true);
 
     const { error } = await supabase.auth.signInWithOtp({
       email: userEmail,
-      options: {
-        captchaToken,
-        emailRedirectTo: window.location.origin,
-      },
+      options: { captchaToken: token, emailRedirectTo: window.location.origin },
     });
-
-    console.log("[Magic Link] Supabase response:", { error });
 
     setLoading(false);
     resetCaptcha();
+
+    console.log("[Magic Link] Supabase response:", { error });
 
     if (error) {
       toast.error(error.message);
@@ -162,7 +148,7 @@ export default function Auth({ onLogin }: AuthProps) {
   };
 
   // -----------------------------------
-  // OTP Verify (captcha required)
+  // OTP Verify
   // -----------------------------------
   const handleCodeLogin = async (code: string) => {
     if (!userEmail || !code) {
@@ -170,30 +156,28 @@ export default function Auth({ onLogin }: AuthProps) {
       return;
     }
 
-    await runCaptcha();
-    if (!captchaToken) {
-      console.log("[OTP Login] captchaToken missing");
+    const token = await runCaptcha();
+    if (!token) {
       toast.error("Captcha verification failed.");
       return;
     }
 
-    console.log("[OTP Login] captchaToken before Supabase:", captchaToken);
-
+    console.log("[OTP Login] captchaToken:", token);
     setLoading(true);
 
     const { data, error } = await supabase.auth.verifyOtp({
       email: userEmail,
       token: code,
       type: "magiclink",
-      options: { captchaToken },
+      options: { captchaToken: token },
     });
-
-    console.log("[OTP Login] Supabase response:", { data, error });
 
     setLoading(false);
     resetCaptcha();
 
-    if (error || !data.session) {
+    console.log("[OTP Login] Supabase response:", { data, error });
+
+    if (error || !data?.session) {
       toast.error(error?.message ?? "Invalid code.");
       setOtp(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
@@ -209,15 +193,12 @@ export default function Auth({ onLogin }: AuthProps) {
   // -----------------------------------
   const handleOtpChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
-
     const newOtp = [...otp];
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
 
     if (value && index < 5) inputRefs.current[index + 1]?.focus();
-    if (newOtp.every(Boolean) && index === 5) {
-      handleCodeLogin(newOtp.join(""));
-    }
+    if (newOtp.every(Boolean) && index === 5) handleCodeLogin(newOtp.join(""));
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
@@ -230,21 +211,17 @@ export default function Auth({ onLogin }: AuthProps) {
     e.preventDefault();
     const paste = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
     const newOtp = [...otp];
-
     for (let i = 0; i < paste.length; i++) newOtp[i] = paste[i];
     setOtp(newOtp);
-
     if (paste.length === 6) handleCodeLogin(paste);
     else inputRefs.current[Math.min(paste.length, 5)]?.focus();
   };
 
   return (
     <div className="space-y-6">
-      {/* Invisible hCaptcha */}
       <HCaptcha
         sitekey="d97cddc0-2708-4c8e-aebc-331a7f40b972"
         size="invisible"
-        onVerify={setCaptchaToken}
         ref={captchaRef}
       />
 
@@ -311,9 +288,7 @@ export default function Auth({ onLogin }: AuthProps) {
             {otp.map((digit, i) => (
               <input
                 key={i}
-                ref={(el) => {
-                  inputRefs.current[i] = el;
-                }}
+                ref={(el) => {inputRefs.current[i] = el;}}
                 type="text"
                 inputMode="numeric"
                 maxLength={1}
