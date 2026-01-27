@@ -18,7 +18,10 @@ export default function Layout() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
-        toast.success(`Logged in as ${session.user.email}`);
+        if (session.user.email)
+          toast.success(`Logged in as ${session.user.email}`);
+        else
+          toast.success(`Logged in as guest`);
 
         // Check for pending redirect
         const pending = localStorage.getItem("pendingRoomRedirect");

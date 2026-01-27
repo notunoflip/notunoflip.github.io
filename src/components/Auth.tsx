@@ -3,7 +3,6 @@ import { supabase } from "../lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { Mail, ArrowLeft, Loader2 } from "lucide-react";
-import HCaptcha from "@hcaptcha/react-hcaptcha";
 
 interface AuthProps {
   onLogin: (session: Session) => void;
@@ -15,172 +14,92 @@ export default function Auth({ onLogin }: AuthProps) {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
 
-  const captchaRef = useRef<HCaptcha>(null);
-  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
     if (step === "code") inputRefs.current[0]?.focus();
   }, [step]);
 
-  // -----------------------------------
-  // Utilities
-  // -----------------------------------
-  const runCaptcha = async (): Promise<string | null> => {
-    console.log("[Captcha] executing...");
-    try {
-      const token = await captchaRef.current?.execute();
-      console.log("[Captcha] token received:", token);
-      return token ?? null;
-    } catch (err) {
-      console.error("[Captcha] execution error:", err);
-      return null;
-    }
-  };
-
-  const resetCaptcha = () => {
-    console.log("[Captcha] resetting");
-    captchaRef.current?.resetCaptcha();
-  };
-
-  const generateGuestName = () => {
-    const animals = [
-      "tiger", "zebra", "panda", "koala", "otter",
-      "eagle", "shark", "whale", "hippo", "lemur",
-    ];
-    const animal = animals[Math.floor(Math.random() * animals.length)];
-    const digits = Math.floor(1000 + Math.random() * 9000);
-    return `${animal}${digits}`;
-  };
-
-  // -----------------------------------
-  // Guest Login
-  // -----------------------------------
   const handleGuestLogin = async () => {
-    const token = await runCaptcha();
-    if (!token) {
-      toast.error("Captcha verification failed.");
-      return;
-    }
-
-    console.log("[Guest Login] captchaToken:", token);
     setLoading(true);
 
-    let guestName = "";
-    let success = false;
-
-    for (let attempt = 0; attempt < 3; attempt++) {
-      guestName = generateGuestName();
-
-      const { error } = await supabase
-        .from("players")
-        .upsert(
-          { id: "guest-" + crypto.randomUUID(), nickname: guestName, is_guest: true },
-          { onConflict: "nickname" }
-        )
-        .select()
-        .single();
-
-      if (!error) {
-        success = true;
-        break;
-      }
-    }
-
-    if (!success) {
-      setLoading(false);
-      resetCaptcha();
-      toast.error("Could not create guest. Try again.");
-      return;
-    }
-
+    // 1️⃣ Sign in anonymously
     const { data, error } = await supabase.auth.signInAnonymously({
-      options: { captchaToken: token, data: { username: guestName, is_guest: true } },
+      options: {
+        data: {
+          // optional metadata; can include "nickname" if you want
+          nickname: `guest-${Math.floor(1000 + Math.random() * 9000)}`,
+          is_guest: true,
+        },
+      },
     });
 
     setLoading(false);
-    resetCaptcha();
 
-    console.log("[Guest Login] Supabase response:", { data, error });
-
-    if (error || !data?.session) {
-      toast.error(error?.message ?? "Guest login failed.");
-      return;
+    if (error) {
+      return toast.error(`Guest login failed: ${error.message}`);
     }
+
+    // 2️⃣ Grab unique info
+    const session = data.session!;
+    const user = data.user!;
+    const guestName = user.user_metadata.nickname || `guest-${user.id.slice(0, 6)}`;
 
     toast.success(`Logged in as ${guestName}`);
-    onLogin(data.session);
+    onLogin(session);
   };
 
-  // -----------------------------------
-  // Magic Link Login
-  // -----------------------------------
+
+  // -----------------------------
+  // Magic link
+  // -----------------------------
   const handleMagicLinkLogin = async () => {
-    if (!userEmail) {
-      toast.error("Please enter your email.");
-      return;
-    }
+    if (!userEmail) return toast.error("Please enter your email.");
 
-    const token = await runCaptcha();
-    if (!token) {
-      toast.error("Captcha verification failed.");
-      return;
-    }
-
-    console.log("[Magic Link] captchaToken:", token);
     setLoading(true);
 
     const { error } = await supabase.auth.signInWithOtp({
       email: userEmail,
-      options: { captchaToken: token, emailRedirectTo: window.location.origin },
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
     });
 
     setLoading(false);
-    resetCaptcha();
-
-    console.log("[Magic Link] Supabase response:", { error });
 
     if (error) {
-      toast.error(error.message);
+      toast.error(`Login error: ${error.message}`);
     } else {
-      toast.success(`Magic link sent to ${userEmail}`);
+      toast.success(`Magic link sent to ${userEmail}.`);
       setStep("code");
     }
   };
 
-  // -----------------------------------
-  // OTP Verify
-  // -----------------------------------
+  // -----------------------------
+  // OTP verify
+  // -----------------------------
   const handleCodeLogin = async (code: string) => {
-    if (!userEmail || !code) {
-      toast.error("Enter email and code.");
-      return;
-    }
+    if (!userEmail || !code) return toast.error("Enter email and code.");
 
-    const token = await runCaptcha();
-    if (!token) {
-      toast.error("Captcha verification failed.");
-      return;
-    }
-
-    console.log("[OTP Login] captchaToken:", token);
     setLoading(true);
 
     const { data, error } = await supabase.auth.verifyOtp({
       email: userEmail,
       token: code,
       type: "magiclink",
-      options: { captchaToken: token },
     });
 
     setLoading(false);
-    resetCaptcha();
 
-    console.log("[OTP Login] Supabase response:", { data, error });
-
-    if (error || !data?.session) {
-      toast.error(error?.message ?? "Invalid code.");
+    if (error) {
+      toast.error(`Code login error: ${error.message}`);
       setOtp(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
+      return;
+    }
+
+    if (!data.session) {
+      toast.error("Missing session data.");
       return;
     }
 
@@ -188,17 +107,15 @@ export default function Auth({ onLogin }: AuthProps) {
     onLogin(data.session);
   };
 
-  // -----------------------------------
-  // OTP Input Handling
-  // -----------------------------------
   const handleOtpChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
+
     const newOtp = [...otp];
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
 
     if (value && index < 5) inputRefs.current[index + 1]?.focus();
-    if (newOtp.every(Boolean) && index === 5) handleCodeLogin(newOtp.join(""));
+    if (newOtp.every(d => d) && index === 5) handleCodeLogin(newOtp.join(""));
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
@@ -211,20 +128,16 @@ export default function Auth({ onLogin }: AuthProps) {
     e.preventDefault();
     const paste = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
     const newOtp = [...otp];
+
     for (let i = 0; i < paste.length; i++) newOtp[i] = paste[i];
     setOtp(newOtp);
+
     if (paste.length === 6) handleCodeLogin(paste);
     else inputRefs.current[Math.min(paste.length, 5)]?.focus();
   };
 
   return (
     <div className="space-y-6">
-      <HCaptcha
-        sitekey="d97cddc0-2708-4c8e-aebc-331a7f40b972"
-        size="invisible"
-        ref={captchaRef}
-      />
-
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center mx-auto">
@@ -235,6 +148,7 @@ export default function Auth({ onLogin }: AuthProps) {
         </h2>
       </div>
 
+      {/* Email Step */}
       {step === "email" && (
         <div className="space-y-3">
           <input
@@ -250,27 +164,35 @@ export default function Auth({ onLogin }: AuthProps) {
           <button
             onClick={handleMagicLinkLogin}
             disabled={loading}
-            className="w-full bg-green-600 text-white py-2 rounded-lg flex justify-center gap-2"
+            className="w-full bg-green-600 text-white py-2 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            {loading ? <Loader2 className="animate-spin" /> : "Send Magic Link"}
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Sending...
+              </>
+            ) : (
+              "Send Magic Link"
+            )}
           </button>
 
-          <div className="flex items-center gap-3 py-2">
-            <div className="flex-grow border-t" />
-            <span className="text-xs text-gray-400">OR</span>
-            <div className="flex-grow border-t" />
+          <div className="relative flex items-center py-2">
+            <div className="flex-grow border-t border-gray-300 dark:border-gray-600" />
+            <span className="mx-3 text-xs text-gray-400">OR</span>
+            <div className="flex-grow border-t border-gray-300 dark:border-gray-600" />
           </div>
 
           <button
             onClick={handleGuestLogin}
             disabled={loading}
-            className="w-full border py-2 rounded-lg"
+            className="w-full border border-gray-300 dark:border-gray-600 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
           >
             Continue as Guest
           </button>
         </div>
       )}
 
+      {/* Code Step */}
       {step === "code" && (
         <div className="space-y-4">
           <button
@@ -278,7 +200,7 @@ export default function Auth({ onLogin }: AuthProps) {
               setStep("email");
               setOtp(["", "", "", "", "", ""]);
             }}
-            className="flex items-center gap-1 text-sm text-gray-500"
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
           >
             <ArrowLeft className="w-4 h-4" />
             Change email
@@ -288,21 +210,23 @@ export default function Auth({ onLogin }: AuthProps) {
             {otp.map((digit, i) => (
               <input
                 key={i}
-                ref={(el) => {inputRefs.current[i] = el;}}
+                ref={(el) => {
+                  inputRefs.current[i] = el;
+                }}
                 type="text"
                 inputMode="numeric"
                 maxLength={1}
                 value={digit}
                 onChange={(e) => handleOtpChange(i, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(i, e)}
-                className="w-full h-12 text-center text-xl border rounded-lg"
+                className="w-full h-12 text-center text-xl font-semibold border rounded-lg dark:bg-gray-700 dark:border-gray-600"
               />
             ))}
           </div>
 
           {loading && (
-            <div className="flex justify-center">
-              <Loader2 className="animate-spin" />
+            <div className="flex justify-center text-sm text-gray-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
             </div>
           )}
         </div>
