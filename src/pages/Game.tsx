@@ -22,7 +22,7 @@ const LOCAL_EDGE_URL = import.meta.env.VITE_SUPABASE_URL + "/functions/v1";
 export default function Game() {
   const { session } = useOutletContext<{ session: Session | null }>();
   const { roomCode } = useParams<{ roomCode: string }>();
-
+  // const navigate = useNavigate();
 
   const {
     loading,
@@ -195,8 +195,10 @@ export default function Game() {
   // ✅ Loading screen
   if (loading || !session || !roomId || !roomCode)
     return (
-      <div className="flex justify-center items-center h-screen text-gray-400">
+      <div className="flex justify-center items-center h-screen text-gray-400 flex-col">
         <Loader2 className="animate-spin w-6 h-6 mr-2" /> Loading...
+
+        <p>If it is taking too long: check internet and try leaving the room by clicking your nickname on top right</p>
       </div>
     );
 
@@ -291,7 +293,7 @@ export default function Game() {
         drawStack={drawStack}
         direction={direction}
         roomCode={roomCode}
-        playerOrder={player_order} 
+        playerOrder={player_order}
       />
     </div>
   );
